@@ -6,7 +6,7 @@ const DATABASE_URL = process.env.RAILWAY_DATABASE_URL || process.env.DATABASE_UR
 async function checkColumn() {
   const pool = new Pool({
     connectionString: DATABASE_URL,
-    ssl: { rejectUnauthorized: false }
+    ssl: false
   });
 
   try {

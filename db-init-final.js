@@ -6,7 +6,7 @@ const path = require('path');
 async function init() {
   const client = new Client({
     connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false }
+    ssl: false
   });
   
   try {

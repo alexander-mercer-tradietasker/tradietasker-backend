@@ -14,7 +14,7 @@ if (!DATABASE_URL) {
 async function applyMigration() {
   const pool = new Pool({
     connectionString: DATABASE_URL,
-    ssl: { rejectUnauthorized: false }
+    ssl: false
   });
 
   try {
