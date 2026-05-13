@@ -97,6 +97,7 @@ const adminSettingsRoutes = require('./routes/adminSettings');
 const migrationRoutes = require('./routes/migrations');
 const migrateOnceRoute = require('./routes/migrate-once');
 const customerDashboardRoutes = require('./routes/customer-dashboard');
+const tradieDashboardRoutes = require('./routes/tradie-dashboard');
 
 // Mount routes
 app.use('/api/auth', authRoutes);
@@ -121,6 +122,9 @@ app.use('/api/migrations', migrationRoutes);
 app.use('/api/migrate-once', migrateOnceRoute);
 app.use('/api/customer-dashboard/jobs', customerDashboardRoutes);
 app.use('/api/customer-dashboard/users/me', customerDashboardRoutes);
+app.use('/api/tradie-dashboard/jobs', tradieDashboardRoutes);
+app.use('/api/tradie-dashboard/customers', tradieDashboardRoutes);
+app.use('/api/tradie-dashboard/users/me', tradieDashboardRoutes);
 
 // Error handler
 app.use((err, req, res, next) => {
