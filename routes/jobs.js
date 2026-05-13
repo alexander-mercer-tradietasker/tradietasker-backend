@@ -589,6 +589,36 @@ router.put('/:id/cancel', authenticateToken, async (req, res) => {
   }
 });
 
+// GET /api/jobs/:id/unlocked-tradies - Get tradies unlocked for this job
+router.get('/:id/unlocked-tradies', authenticateToken, async (req, res) => {
+  try {
+    const job = await get('SELECT * FROM jobs WHERE id = ?', [req.params.id]);
+    if (!job) {
+      return res.status(404).json({ error: 'Job not found' });
+    }
+    
+    if (job.user_id !== req.user.id) {
+      return res.status(403).json({ error: 'Not authorized' });
+    }
+    
+    const tradies = await query(
+      `SELECT DISTINCT
+        u.id, u.name, u.email, u.business_name
+      FROM users u
+      INNER JOIN contact_transactions ct ON ct.to_user_id = u.id
+      WHERE ct.from_user_id = ? AND ct.job_id = ?
+      AND ct.type IN ('poster-unlock-tradie', 'poster-3-pack', 'poster-20-pack')
+      ORDER BY u.name`,
+      [req.user.id, req.params.id]
+    );
+    
+    res.json({ tradies });
+  } catch (error) {
+    console.error('Get unlocked tradies error:', error);
+    res.status(500).json({ error: 'Failed to get unlocked tradies' });
+  }
+});
+
 // GET /api/jobs/my-jobs - Get tradie's jobs (jobs they've unlocked or been assigned to)
 router.get('/my-jobs', authenticateToken, async (req, res) => {
   try {
