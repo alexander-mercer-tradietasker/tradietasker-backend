@@ -85,7 +85,7 @@ const creditRoutes = require('./routes/credits');
 const jobRoutes = require('./routes/jobs');
 const contactRoutes = require('./routes/contact');
 const taskerRoutes = require('./routes/taskers');
-const reviewRoutes = require('./routes/reviews');
+const reviewRoutes = require('./routes/reviews-new');
 const adminRoutes = require('./routes/admin');
 const stripeRoutes = require('./routes/stripe');
 const profileUnlockRoutes = require('./routes/profileUnlocks');
@@ -102,6 +102,7 @@ const customerDashboardRoutes = require('./routes/customer-dashboard');
 const tradieDashboardRoutes = require('./routes/tradie-dashboard');
 const applyMigrationRoutes = require('./routes/apply-migration');
 const migrateInvoicesRoute = require('./routes/migrate-invoices');
+const migrateJobStatusRoute = require('./routes/migrate-job-status');
 
 // Mount routes
 app.use('/api/auth', authRoutes);
@@ -133,6 +134,7 @@ app.use('/api/tradie-dashboard/customers', tradieDashboardRoutes);
 app.use('/api/tradie-dashboard/users/me', tradieDashboardRoutes);
 app.use('/api/migrations/apply', applyMigrationRoutes);
 app.use('/api/migrations/invoices', migrateInvoicesRoute);
+app.use('/api/migrations/job-status', migrateJobStatusRoute);
 
 // Error handler
 app.use((err, req, res, next) => {

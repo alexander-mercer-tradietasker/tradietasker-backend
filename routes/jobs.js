@@ -549,6 +549,46 @@ router.put('/:id/complete', authenticateToken, async (req, res) => {
   }
 });
 
+// PUT /api/jobs/:id/cancel - Cancel a job
+router.put('/:id/cancel', authenticateToken, async (req, res) => {
+  try {
+    // Verify ownership (customer or admin)
+    const job = await get('SELECT * FROM jobs WHERE id = ?', [req.params.id]);
+    if (!job) {
+      return res.status(404).json({ error: 'Job not found' });
+    }
+
+    if (job.user_id !== req.user.id && req.user.tier !== 'god') {
+      return res.status(403).json({ error: 'Not authorized to cancel this job' });
+    }
+
+    if (job.status === 'cancelled') {
+      return res.status(400).json({ error: 'Job is already cancelled' });
+    }
+
+    if (job.status === 'complete') {
+      return res.status(400).json({ error: 'Cannot cancel a completed job' });
+    }
+
+    // Cancel the job
+    await run(
+      `UPDATE jobs 
+       SET status = 'cancelled', 
+           updated_at = datetime('now') 
+       WHERE id = ?`,
+      [req.params.id]
+    );
+
+    res.json({ 
+      message: 'Job cancelled successfully',
+      status: 'cancelled'
+    });
+  } catch (error) {
+    console.error('Cancel job error:', error);
+    res.status(500).json({ error: 'Failed to cancel job' });
+  }
+});
+
 // GET /api/jobs/my-jobs - Get tradie's jobs (jobs they've unlocked or been assigned to)
 router.get('/my-jobs', authenticateToken, async (req, res) => {
   try {
