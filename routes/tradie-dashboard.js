@@ -459,4 +459,198 @@ router.delete('/users/me/qualifications/:id', verifyTradie, async (req, res) => 
   }
 });
 
+// ============================================
+// GET /api/tradie-dashboard/profile-status
+// Check if tradie profile is completed
+// ============================================
+router.get('/profile-status', verifyTradie, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    
+    const user = await query(
+      'SELECT profile_completed FROM users WHERE id = ?',
+      [userId]
+    );
+    
+    if (user.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    res.json({ 
+      profile_completed: user[0].profile_completed || false 
+    });
+  } catch (error) {
+    console.error('Error checking profile status:', error);
+    res.status(500).json({ error: 'Failed to check profile status' });
+  }
+});
+
+// ============================================
+// POST /api/tradie-dashboard/complete-profile
+// Complete tradie profile after initial registration
+// ============================================
+router.post('/complete-profile', verifyTradie, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const {
+      // Personal details (if not already provided)
+      date_of_birth,
+      residential_address,
+      residential_suburb,
+      residential_state,
+      residential_postcode,
+      
+      // Business info
+      abn,
+      business_name,
+      business_address,
+      business_phone,
+      business_email,
+      
+      // Service area
+      service_postcode,
+      service_radius_km,
+      
+      // Professions and job types (arrays of IDs)
+      selected_professions,
+      selected_job_types,
+      
+      // Qualifications (text field or array)
+      qualifications,
+      
+      // Subscription tier
+      tier,
+    } = req.body;
+
+    // Start transaction
+    await query('BEGIN TRANSACTION');
+
+    try {
+      // Update user basic info
+      const updateFields = [];
+      const updateParams = [];
+      
+      if (date_of_birth) {
+        updateFields.push('date_of_birth = ?');
+        updateParams.push(date_of_birth);
+      }
+      if (residential_address) {
+        updateFields.push('residential_address = ?');
+        updateParams.push(residential_address);
+      }
+      if (residential_suburb) {
+        updateFields.push('residential_suburb = ?');
+        updateParams.push(residential_suburb);
+      }
+      if (residential_state) {
+        updateFields.push('residential_state = ?');
+        updateParams.push(residential_state);
+      }
+      if (residential_postcode) {
+        updateFields.push('residential_postcode = ?');
+        updateParams.push(residential_postcode);
+      }
+      if (abn) {
+        updateFields.push('abn = ?');
+        updateParams.push(abn);
+      }
+      if (business_name) {
+        updateFields.push('business_name = ?');
+        updateParams.push(business_name);
+      }
+      if (business_address) {
+        updateFields.push('business_address = ?');
+        updateParams.push(business_address);
+      }
+      if (business_phone) {
+        updateFields.push('business_phone = ?');
+        updateParams.push(business_phone);
+      }
+      if (business_email) {
+        updateFields.push('business_email = ?');
+        updateParams.push(business_email);
+      }
+      if (service_postcode) {
+        updateFields.push('service_postcode = ?');
+        updateParams.push(service_postcode);
+      }
+      if (service_radius_km) {
+        updateFields.push('service_radius_km = ?');
+        updateParams.push(service_radius_km);
+      }
+      if (tier) {
+        updateFields.push('tier = ?');
+        updateParams.push(tier);
+      }
+      
+      // Always mark profile as completed
+      updateFields.push('profile_completed = ?');
+      updateParams.push(true);
+      
+      updateParams.push(userId);
+      
+      const updateSQL = `UPDATE users SET ${updateFields.join(', ')} WHERE id = ?`;
+      await query(updateSQL, updateParams);
+
+      // Add professions
+      if (selected_professions && Array.isArray(selected_professions)) {
+        for (const professionId of selected_professions) {
+          await query(
+            `INSERT INTO user_professions (user_id, profession_id, state)
+             VALUES (?, ?, 'NSW')
+             ON CONFLICT (user_id, profession_id) DO NOTHING`,
+            [userId, professionId]
+          );
+        }
+      }
+
+      // Add job types
+      if (selected_job_types && Array.isArray(selected_job_types)) {
+        for (const jobTypeId of selected_job_types) {
+          await query(
+            `INSERT INTO user_job_types (user_id, job_type_id)
+             VALUES (?, ?)
+             ON CONFLICT (user_id, job_type_id) DO NOTHING`,
+            [userId, jobTypeId]
+          );
+        }
+      }
+
+      // Add qualifications if provided as text
+      if (qualifications && typeof qualifications === 'string' && qualifications.trim()) {
+        // Split by newlines and add each as a qualification
+        const qualLines = qualifications.split('\n').filter(q => q.trim());
+        for (const qual of qualLines) {
+          await query(
+            `INSERT INTO user_qualifications (user_id, type, name)
+             VALUES (?, 'other', ?)`,
+            [userId, qual.trim()]
+          );
+        }
+      }
+
+      // Commit transaction
+      await query('COMMIT');
+
+      // Get updated user
+      const updatedUser = await query(
+        'SELECT id, email, name, phone, role, tier, credits, profile_completed FROM users WHERE id = ?',
+        [userId]
+      );
+
+      res.json({
+        message: 'Profile completed successfully',
+        user: updatedUser[0],
+      });
+    } catch (error) {
+      // Rollback on error
+      await query('ROLLBACK');
+      throw error;
+    }
+  } catch (error) {
+    console.error('Error completing profile:', error);
+    res.status(500).json({ error: 'Failed to complete profile' });
+  }
+});
+
 module.exports = router;

@@ -33,15 +33,19 @@ router.post('/register',
       // Hash password
       const passwordHash = await bcrypt.hash(password, 10);
 
-      // Create user
+      // Create user with profile_completed flag
+      // For taskers, profile_completed starts as false (they need to complete profile)
+      // For posters, it starts as true (they don't need additional setup)
+      const profileCompleted = role === 'poster' ? 1 : 0;
+      
       const result = await run(
-        `INSERT INTO users (email, password, name, phone, role, tier, credits)
-         VALUES (?, ?, ?, ?, ?, 'free', 0) RETURNING id`,
-        [email, passwordHash, name, phone || null, role]
+        `INSERT INTO users (email, password_hash, name, phone, role, tier, credits, profile_completed)
+         VALUES (?, ?, ?, ?, ?, 'free', 0, ?)`,
+        [email, passwordHash, name, phone || null, role, profileCompleted]
       );
 
       // Get created user
-      const user = await get('SELECT id, email, name, phone, role, tier, credits FROM users WHERE id = ?', [result.lastID]);
+      const user = await get('SELECT id, email, name, phone, role, tier, credits, profile_completed FROM users WHERE id = ?', [result.lastID]);
 
       // Generate token
       const token = generateToken(user.id);
