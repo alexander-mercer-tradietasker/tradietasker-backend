@@ -218,6 +218,20 @@ async function initializeDatabase() {
         await pool.query(msgMigration);
         console.log('✓ Messages table created');
       }
+      
+      // Check if profile_completed column exists
+      const profileCompletedCheck = await pool.query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'users' AND column_name = 'profile_completed'
+      `);
+      
+      if (profileCompletedCheck.rows.length === 0) {
+        console.log('Adding profile_completed column...');
+        const profileMigration = fs.readFileSync(path.join(__dirname, 'migrations', '006_add_profile_completed.sql'), 'utf8');
+        await pool.query(profileMigration);
+        console.log('✓ profile_completed column added');
+      }
     }
   } catch (error) {
     console.error('Database initialization error:', error.message);
