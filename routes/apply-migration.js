@@ -239,4 +239,57 @@ router.post('/seed-tradie-test-data', async (req, res) => {
   }
 });
 
+router.post('/run-job-status', async (req, res) => {
+  try {
+    const { secret } = req.body;
+    
+    if (secret !== MIGRATION_SECRET) {
+      return res.status(403).json({ error: 'Invalid secret' });
+    }
+
+    if (!process.env.DATABASE_URL) {
+      return res.status(500).json({ error: 'DATABASE_URL not configured' });
+    }
+
+    const pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+    });
+
+    const migrationPath = path.join(__dirname, '..', 'migrations', '008_job_status_and_reviews.sql');
+    const migration = fs.readFileSync(migrationPath, 'utf8');
+    
+    await pool.query(migration);
+    
+    // Verify migration
+    const columnCheck = await pool.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'jobs' AND column_name = 'assigned_tradie_id'
+    `);
+    
+    const reviewsCheck = await pool.query(`
+      SELECT COUNT(*) as count 
+      FROM information_schema.tables 
+      WHERE table_name = 'reviews'
+    `);
+    
+    await pool.end();
+    
+    res.json({ 
+      message: 'Migration 008_job_status_and_reviews.sql applied successfully',
+      timestamp: new Date().toISOString(),
+      assigned_tradie_id_exists: columnCheck.rows.length > 0,
+      reviews_table_exists: parseInt(reviewsCheck.rows[0].count) > 0
+    });
+    
+  } catch (error) {
+    console.error('Migration error:', error);
+    res.status(500).json({ 
+      error: 'Migration failed',
+      details: error.message 
+    });
+  }
+});
+
 module.exports = router;
