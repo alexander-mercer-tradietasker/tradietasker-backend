@@ -27,7 +27,7 @@ router.get('/', optionalAuth, async (req, res) => {
         u.business_name,
         COUNT(DISTINCT r.id) as review_count,
         AVG(r.stars) as avg_rating,
-        GROUP_CONCAT(DISTINCT p.name) as professions
+        STRING_AGG(DISTINCT p.name, ', ') as professions
       FROM users u
       LEFT JOIN reviews r ON u.id = r.reviewee_id
       LEFT JOIN user_professions up ON u.id = up.user_id
