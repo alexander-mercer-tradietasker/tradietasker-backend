@@ -38,7 +38,7 @@ router.get('/threads', requireAuth, async (req, res) => {
          FROM messages 
          WHERE thread_id = m.thread_id 
            AND recipient_id = ? 
-           AND read = FALSE) as unread_count
+           AND read = 0) as unread_count
       FROM messages m
       LEFT JOIN users sender ON m.sender_id = sender.id
       LEFT JOIN users recipient ON m.recipient_id = recipient.id
@@ -132,8 +132,7 @@ router.post('/send', requireAuth, async (req, res) => {
     // Insert message
     const result = await run(`
       INSERT INTO messages (sender_id, recipient_id, subject, body, thread_id, read, created_at)
-      VALUES (?, ?, ?, ?, ?, FALSE, CURRENT_TIMESTAMP)
-      RETURNING id
+      VALUES (?, ?, ?, ?, ?, 0, datetime('now'))
     `, [sender_id, recipient_id, subject || '', body, finalThreadId]);
 
     const messageId = result.lastID;
@@ -161,8 +160,8 @@ router.put('/thread/:threadId/read', requireAuth, async (req, res) => {
     // Mark all messages in thread as read for current user (as recipient)
     await run(`
       UPDATE messages
-      SET read = TRUE
-      WHERE thread_id = ? AND recipient_id = ? AND read = FALSE
+      SET read = 1
+      WHERE thread_id = ? AND recipient_id = ? AND read = 0
     `, [threadId, userId]);
 
     res.json({ success: true });
@@ -180,7 +179,7 @@ router.get('/unread-count', requireAuth, async (req, res) => {
     const result = await get(`
       SELECT COUNT(*) as count
       FROM messages
-      WHERE recipient_id = ? AND read = FALSE
+      WHERE recipient_id = ? AND read = 0
     `, [userId]);
 
     res.json({ unread_count: result.count || 0 });

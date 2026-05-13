@@ -1,94 +1,94 @@
-// Seed test message threads for TradieTasker
-// Run after users are seeded
-
+const { run } = require('../db/connection');
 const { v4: uuidv4 } = require('uuid');
 
-async function seedTestMessages(pool) {
-  console.log('Seeding test message threads...');
-
+async function seedMessages() {
   try {
-    // Get test users
-    const usersResult = await pool.query('SELECT id, name, email, role FROM users LIMIT 5');
-    const users = usersResult.rows;
+    console.log('Seeding test messages...');
 
-    if (users.length < 2) {
-      console.log('⚠ Not enough users to create message threads. Skipping.');
-      return;
-    }
+    // Create 3 message threads as requested
 
-    // Create 3 test threads
+    // Thread 1: Test Customer (1) <-> Test Tradie (2)
     const thread1 = uuidv4();
-    const thread2 = uuidv4();
-    const thread3 = uuidv4();
-
-    const now = new Date();
-    const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-    const twoDaysAgo = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000);
-
-    // Thread 1: Unread conversation about a plumbing job
-    await pool.query(`
+    await run(`
       INSERT INTO messages (sender_id, recipient_id, subject, body, thread_id, read, created_at)
-      VALUES 
-        ($1, $2, 'Plumbing job enquiry', 'Hi, I saw your plumbing job posting. I have 10 years experience and am available next week. Can we discuss the details?', $3, TRUE, $4),
-        ($2, $1, 'Re: Plumbing job enquiry', 'Thanks for reaching out! The job involves fixing a leaking tap and checking the hot water system. When would suit you?', $3, TRUE, $5),
-        ($1, $2, 'Re: Plumbing job enquiry', 'Tuesday or Wednesday morning would work best for me. I charge $85/hour + materials.', $3, FALSE, $6)
-    `, [users[0].id, users[1].id, thread1, twoDaysAgo, yesterday, now]);
+      VALUES (?, ?, ?, ?, ?, ?, datetime('now', '-2 days'))
+    `, [1, 2, 'Plumbing Job Enquiry', 'Hi, I need a plumber to fix a leaking tap. Are you available this week?', thread1, true]);
 
-    // Thread 2: Read conversation about electrical work
-    if (users.length >= 3) {
-      await pool.query(`
-        INSERT INTO messages (sender_id, recipient_id, subject, body, thread_id, read, created_at)
-        VALUES 
-          ($1, $2, 'Electrical safety switch installation', 'I need a safety switch installed. Are you licensed for this type of work?', $3, TRUE, $4),
-          ($2, $1, 'Re: Electrical safety switch installation', 'Yes, I am a licensed electrician. I can come out for a quote this week.', $3, TRUE, $5)
-      `, [users[1].id, users[2].id, thread2, twoDaysAgo, yesterday]);
-    }
+    await run(`
+      INSERT INTO messages (sender_id, recipient_id, subject, body, thread_id, read, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, datetime('now', '-2 days', '+2 hours'))
+    `, [2, 1, 'Plumbing Job Enquiry', 'Yes, I can help with that. I have availability on Thursday afternoon. Would that work for you?', thread1, true]);
 
-    // Thread 3: Unread initial message
-    if (users.length >= 4) {
-      await pool.query(`
-        INSERT INTO messages (sender_id, recipient_id, subject, body, thread_id, read, created_at)
-        VALUES 
-          ($1, $2, 'Deck building quote', 'Hi, I am interested in building a new deck. Could you provide a quote? The area is approximately 4m x 6m.', $3, FALSE, $4)
-      `, [users[3].id, users[0].id, thread3, now]);
-    }
+    await run(`
+      INSERT INTO messages (sender_id, recipient_id, subject, body, thread_id, read, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, datetime('now', '-1 days'))
+    `, [1, 2, 'Plumbing Job Enquiry', 'Thursday afternoon works great! See you then.', thread1, false]);
 
-    console.log('✓ Test message threads created');
-    console.log(`  - Thread 1: ${users[0].name} ↔ ${users[1].name} (3 messages, 1 unread)`);
-    if (users.length >= 3) {
-      console.log(`  - Thread 2: ${users[1].name} ↔ ${users[2].name} (2 messages, all read)`);
-    }
-    if (users.length >= 4) {
-      console.log(`  - Thread 3: ${users[3].name} → ${users[0].name} (1 message, unread)`);
-    }
+    console.log('✓ Thread 1 created: Customer <-> Tradie (Plumbing)');
+
+    // Thread 2: Test Customer (1) <-> Test Tradie (7)
+    const thread2 = uuidv4();
+    await run(`
+      INSERT INTO messages (sender_id, recipient_id, subject, body, thread_id, read, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, datetime('now', '-3 days'))
+    `, [1, 7, 'Electrical Work Quote', 'I need an electrician to install some outdoor lighting. Can you provide a quote?', thread2, true]);
+
+    await run(`
+      INSERT INTO messages (sender_id, recipient_id, subject, body, thread_id, read, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, datetime('now', '-3 days', '+1 hour'))
+    `, [7, 1, 'Electrical Work Quote', 'Sure! Could you send me some photos of the area and let me know how many lights you need?', thread2, true]);
+
+    await run(`
+      INSERT INTO messages (sender_id, recipient_id, subject, body, thread_id, read, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, datetime('now', '-2 days', '+8 hours'))
+    `, [1, 7, 'Electrical Work Quote', 'Here are the photos. I need 4 lights installed along the pathway and 2 near the garage.', thread2, false]);
+
+    await run(`
+      INSERT INTO messages (sender_id, recipient_id, subject, body, thread_id, read, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, datetime('now', '-6 hours'))
+    `, [7, 1, 'Electrical Work Quote', 'Thanks! Based on the photos, I can provide a quote of $850 including materials and labour. Let me know if you want to proceed.', thread2, false]);
+
+    console.log('✓ Thread 2 created: Customer <-> Tradie (Electrical)');
+
+    // Thread 3: Another Customer (9) <-> Test Tradie (2)
+    const thread3 = uuidv4();
+    await run(`
+      INSERT INTO messages (sender_id, recipient_id, subject, body, thread_id, read, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, datetime('now', '-5 days'))
+    `, [9, 2, 'Kitchen Renovation', 'I saw your profile and would like to discuss a kitchen renovation project. Are you taking on new projects?', thread3, true]);
+
+    await run(`
+      INSERT INTO messages (sender_id, recipient_id, subject, body, thread_id, read, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, datetime('now', '-5 days', '+4 hours'))
+    `, [2, 9, 'Kitchen Renovation', 'Yes, I am available for new projects. When would be a good time to inspect the site and discuss your requirements?', thread3, true]);
+
+    await run(`
+      INSERT INTO messages (sender_id, recipient_id, subject, body, thread_id, read, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, datetime('now', '-4 days'))
+    `, [9, 2, 'Kitchen Renovation', 'Great! How about next Monday morning around 10 AM?', thread3, false]);
+
+    console.log('✓ Thread 3 created: Another Customer <-> Tradie (Kitchen Reno)');
+
+    console.log('\n✅ Test messages seeded successfully!');
+    console.log('Summary:');
+    console.log('  - 3 message threads created');
+    console.log('  - 10 total messages');
+    console.log('  - Mix of read and unread messages');
 
   } catch (error) {
-    console.error('Error seeding messages:', error.message);
+    console.error('❌ Error seeding messages:', error.message);
     throw error;
   }
 }
 
-// If run directly
+// Run if called directly
 if (require.main === module) {
-  const { Pool } = require('pg');
-  require('dotenv').config();
-
-  const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
-  });
-
-  seedTestMessages(pool)
-    .then(() => {
-      console.log('✓ Seed complete');
-      pool.end();
-      process.exit(0);
-    })
-    .catch(error => {
-      console.error('Seed failed:', error);
-      pool.end();
+  seedMessages()
+    .then(() => process.exit(0))
+    .catch((error) => {
+      console.error(error);
       process.exit(1);
     });
 }
 
-module.exports = { seedTestMessages };
+module.exports = { seedMessages };
