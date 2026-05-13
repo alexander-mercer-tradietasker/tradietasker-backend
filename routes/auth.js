@@ -1,7 +1,7 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const { body, validationResult } = require('express-validator');
-const { query, get, run } = require('../db/connection');
+const { query, get, run, isPostgres } = require('../db/connection');
 const { generateToken } = require('../middleware/auth');
 
 const router = express.Router();
@@ -15,14 +15,17 @@ router.post('/register',
     body('role').isIn(['poster', 'tasker', 'both']).optional(),
   ],
   async (req, res) => {
+    console.log('[Register] Request received:', { email: req.body.email, role: req.body.role });
     try {
       // Validate input
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
+        console.log('[Register] Validation errors:', errors.array());
         return res.status(400).json({ errors: errors.array() });
       }
 
       const { email, password, name, phone, role = 'poster' } = req.body;
+      console.log('[Register] After validation:', { email, name, phone, role });
 
       // Check if user already exists
       const existingUser = await get('SELECT id FROM users WHERE email = ?', [email]);
@@ -38,8 +41,11 @@ router.post('/register',
       // For posters, it starts as true (they don't need additional setup)
       const profileCompleted = role === 'poster' ? 1 : 0;
       
+      // Use password_hash for PostgreSQL, password for SQLite
+      const passwordColumn = isPostgres ? 'password_hash' : 'password';
+      
       const result = await run(
-        `INSERT INTO users (email, password_hash, name, phone, role, tier, credits, profile_completed)
+        `INSERT INTO users (email, ${passwordColumn}, name, phone, role, tier, credits, profile_completed)
          VALUES (?, ?, ?, ?, ?, 'free', 0, ?)`,
         [email, passwordHash, name, phone || null, role, profileCompleted]
       );
@@ -57,7 +63,11 @@ router.post('/register',
       });
     } catch (error) {
       console.error('Registration error:', error);
-      res.status(500).json({ error: 'Registration failed' });
+      console.error('Stack:', error.stack);
+      res.status(500).json({ 
+        error: 'Registration failed',
+        details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      });
     }
   }
 );
