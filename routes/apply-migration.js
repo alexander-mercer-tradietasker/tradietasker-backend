@@ -7,6 +7,43 @@ const { Pool } = require('pg');
 // Simple secret-based authentication (not for production long-term)
 const MIGRATION_SECRET = process.env.MIGRATION_SECRET || 'tradie-migration-secret-2026';
 
+router.post('/run-invoices', async (req, res) => {
+  try {
+    const { secret } = req.body;
+    
+    if (secret !== MIGRATION_SECRET) {
+      return res.status(403).json({ error: 'Invalid secret' });
+    }
+
+    if (!process.env.DATABASE_URL) {
+      return res.status(500).json({ error: 'DATABASE_URL not configured' });
+    }
+
+    const pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+    });
+
+    const migrationPath = path.join(__dirname, '..', 'migrations', '005_add_invoices_and_admin_settings.sql');
+    const migration = fs.readFileSync(migrationPath, 'utf8');
+    
+    await pool.query(migration);
+    await pool.end();
+    
+    res.json({ 
+      message: 'Migration 005_add_invoices_and_admin_settings.sql applied successfully',
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('Migration error:', error);
+    res.status(500).json({ 
+      error: 'Migration failed',
+      details: error.message 
+    });
+  }
+});
+
 router.post('/run-tradie-dashboard', async (req, res) => {
   try {
     const { secret } = req.body;
