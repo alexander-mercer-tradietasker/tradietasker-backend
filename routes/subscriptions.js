@@ -66,7 +66,7 @@ router.get('/my-subscription', authenticateToken, async (req, res) => {
   try {
     const subscription = await get(
       `SELECT * FROM subscriptions 
-       WHERE user_id = ? AND is_active = 1 
+       WHERE user_id = ? AND is_active = true 
        ORDER BY created_at DESC LIMIT 1`,
       [req.user.id]
     );
@@ -98,7 +98,7 @@ router.post('/subscribe',
 
       // Deactivate old subscriptions
       await run(
-        'UPDATE subscriptions SET is_active = 0 WHERE user_id = ?',
+        'UPDATE subscriptions SET is_active = false WHERE user_id = ?',
         [req.user.id]
       );
 
@@ -160,7 +160,7 @@ router.put('/change-tier',
       // Get current subscription
       const currentSub = await get(
         `SELECT * FROM subscriptions 
-         WHERE user_id = ? AND is_active = 1 
+         WHERE user_id = ? AND is_active = true 
          ORDER BY created_at DESC LIMIT 1`,
         [req.user.id]
       );
@@ -168,7 +168,7 @@ router.put('/change-tier',
       if (tier === 'free') {
         // Cancel subscription
         if (currentSub) {
-          await run('UPDATE subscriptions SET is_active = 0 WHERE id = ?', [currentSub.id]);
+          await run('UPDATE subscriptions SET is_active = false WHERE id = ?', [currentSub.id]);
         }
         await run('UPDATE users SET tier = ? WHERE id = ?', ['free', req.user.id]);
         
@@ -177,7 +177,7 @@ router.put('/change-tier',
 
       // Deactivate old subscription
       if (currentSub) {
-        await run('UPDATE subscriptions SET is_active = 0 WHERE id = ?', [currentSub.id]);
+        await run('UPDATE subscriptions SET is_active = false WHERE id = ?', [currentSub.id]);
       }
 
       // Create new subscription
@@ -224,7 +224,7 @@ router.put('/change-tier',
 router.post('/cancel', authenticateToken, async (req, res) => {
   try {
     await run(
-      'UPDATE subscriptions SET is_active = 0 WHERE user_id = ?',
+      'UPDATE subscriptions SET is_active = false WHERE user_id = ?',
       [req.user.id]
     );
 

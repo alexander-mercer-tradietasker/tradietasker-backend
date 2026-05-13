@@ -264,7 +264,7 @@ router.post('/3-tradie-pack',
       // Check if package already exists for this job
       const existing = await get(
         `SELECT id FROM poster_packages 
-         WHERE user_id = ? AND job_id = ? AND type = '3-tradie' AND is_active = 1`,
+         WHERE user_id = ? AND job_id = ? AND type = '3-tradie' AND is_active = true`,
         [req.user.id, job_id]
       );
       if (existing) {
@@ -322,7 +322,7 @@ router.post('/20-tradie-pack',
       // Check if package already exists for this job
       const existing = await get(
         `SELECT id FROM poster_packages 
-         WHERE user_id = ? AND job_id = ? AND type = '20-tradie' AND is_active = 1`,
+         WHERE user_id = ? AND job_id = ? AND type = '20-tradie' AND is_active = true`,
         [req.user.id, job_id]
       );
       if (existing) {

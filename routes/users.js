@@ -44,7 +44,7 @@ router.get('/me', authenticateToken, async (req, res) => {
     // Get active subscription
     const subscription = await get(
       `SELECT * FROM subscriptions 
-       WHERE user_id = ? AND is_active = 1 
+       WHERE user_id = ? AND is_active = true 
        ORDER BY created_at DESC LIMIT 1`,
       [req.user.id]
     );
