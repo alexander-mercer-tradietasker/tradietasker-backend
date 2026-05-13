@@ -14,8 +14,8 @@ router.get('/me', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    // Don't send password hash
-    delete user.password_hash;
+    // Don't send password
+    delete user.password;
 
     // Get professions
     const professions = await query(
@@ -95,14 +95,19 @@ router.put('/me',
         'residential_address', 'residential_suburb', 'residential_state', 'residential_postcode',
         'postal_address', 'postal_postcode',
         'abn', 'business_name', 'business_address', 'business_phone', 'business_email',
-        'profile_photo_url', 'business_logo_url',
-        'service_radius_km', 'service_postcode'
+        'profile_photo', 'business_logo',
+        'service_radius_km', 'service_postcode', 'notification_prefs'
       ];
 
       const updates = {};
       allowedFields.forEach(field => {
         if (req.body[field] !== undefined) {
-          updates[field] = req.body[field];
+          // Stringify JSON fields
+          if (field === 'notification_prefs' && typeof req.body[field] === 'object') {
+            updates[field] = JSON.stringify(req.body[field]);
+          } else {
+            updates[field] = req.body[field];
+          }
         }
       });
 
@@ -121,7 +126,7 @@ router.put('/me',
 
       // Get updated user
       const user = await get('SELECT * FROM users WHERE id = ?', [req.user.id]);
-      delete user.password_hash;
+      delete user.password;
 
       res.json({
         message: 'Profile updated successfully',
@@ -301,5 +306,201 @@ router.post('/me/qualifications',
     }
   }
 );
+
+// DELETE /api/users/me/qualifications/:id - Remove qualification
+router.delete('/me/qualifications/:id', authenticateToken, async (req, res) => {
+  try {
+    const result = await run(
+      'DELETE FROM user_qualifications WHERE id = ? AND user_id = ?',
+      [req.params.id, req.user.id]
+    );
+
+    if (result.changes === 0) {
+      return res.status(404).json({ error: 'Qualification not found' });
+    }
+
+    res.json({ message: 'Qualification removed successfully' });
+  } catch (error) {
+    console.error('Remove qualification error:', error);
+    res.status(500).json({ error: 'Failed to remove qualification' });
+  }
+});
+
+// POST /api/users/me/password - Change password
+router.post('/me/password',
+  authenticateToken,
+  [
+    body('current_password').notEmpty(),
+    body('new_password').isLength({ min: 6 }),
+  ],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+      }
+
+      const { current_password, new_password } = req.body;
+
+      // Get user with password
+      const user = await get('SELECT password FROM users WHERE id = ?', [req.user.id]);
+      
+      // Verify current password
+      const bcrypt = require('bcryptjs');
+      const isValid = await bcrypt.compare(current_password, user.password);
+      
+      if (!isValid) {
+        return res.status(401).json({ error: 'Current password is incorrect' });
+      }
+
+      // Hash new password
+      const newHash = await bcrypt.hash(new_password, 10);
+
+      // Update password
+      await run(
+        'UPDATE users SET password = ?, updated_at = datetime(\'now\') WHERE id = ?',
+        [newHash, req.user.id]
+      );
+
+      res.json({ message: 'Password changed successfully' });
+    } catch (error) {
+      console.error('Change password error:', error);
+      res.status(500).json({ error: 'Failed to change password' });
+    }
+  }
+);
+
+// POST /api/users/me/photo - Upload profile photo
+router.post('/me/photo',
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const { photo_url } = req.body;
+      
+      if (!photo_url) {
+        return res.status(400).json({ error: 'photo_url required' });
+      }
+
+      await run(
+        'UPDATE users SET profile_photo = ?, updated_at = datetime(\'now\') WHERE id = ?',
+        [photo_url, req.user.id]
+      );
+
+      res.json({ 
+        message: 'Profile photo updated successfully',
+        photo_url
+      });
+    } catch (error) {
+      console.error('Upload photo error:', error);
+      res.status(500).json({ error: 'Failed to upload photo' });
+    }
+  }
+);
+
+// POST /api/users/me/logo - Upload business logo
+router.post('/me/logo',
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const { logo_url } = req.body;
+      
+      if (!logo_url) {
+        return res.status(400).json({ error: 'logo_url required' });
+      }
+
+      await run(
+        'UPDATE users SET business_logo = ?, updated_at = datetime(\'now\') WHERE id = ?',
+        [logo_url, req.user.id]
+      );
+
+      res.json({ 
+        message: 'Business logo updated successfully',
+        logo_url
+      });
+    } catch (error) {
+      console.error('Upload logo error:', error);
+      res.status(500).json({ error: 'Failed to upload logo' });
+    }
+  }
+);
+
+// POST /api/users/me/password - Change password
+router.post('/me/password',
+  authenticateToken,
+  [
+    body('current_password').notEmpty(),
+    body('new_password').isLength({ min: 6 }),
+    body('confirm_password').notEmpty()
+  ],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+      }
+
+      const { current_password, new_password, confirm_password } = req.body;
+
+      // Check if new passwords match
+      if (new_password !== confirm_password) {
+        return res.status(400).json({ error: 'New passwords do not match' });
+      }
+
+      // Get current user with password hash
+      const user = await get('SELECT * FROM users WHERE id = ?', [req.user.id]);
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      // Verify current password
+      const isValid = await bcrypt.compare(current_password, user.password_hash);
+      if (!isValid) {
+        return res.status(401).json({ error: 'Current password is incorrect' });
+      }
+
+      // Hash new password
+      const newHash = await bcrypt.hash(new_password, 10);
+
+      // Update password
+      await run(
+        `UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE id = ?`,
+        [newHash, req.user.id]
+      );
+
+      res.json({ message: 'Password changed successfully' });
+    } catch (error) {
+      console.error('Change password error:', error);
+      res.status(500).json({ error: 'Failed to change password' });
+    }
+  }
+);
+
+// POST /api/users/me/photo - Upload profile photo
+router.post('/me/photo', authenticateToken, async (req, res) => {
+  try {
+    // For now, just accept a URL or base64 data
+    // In production, this would handle multipart/form-data with multer and resize
+    const { photo_url } = req.body;
+
+    if (!photo_url) {
+      return res.status(400).json({ error: 'photo_url required' });
+    }
+
+    // TODO: Download, resize to 150KB, upload to storage, get URL
+    // For now, just store the URL directly
+    await run(
+      `UPDATE users SET profile_photo_url = ?, updated_at = datetime('now') WHERE id = ?`,
+      [photo_url, req.user.id]
+    );
+
+    res.json({ 
+      message: 'Profile photo updated successfully',
+      photo_url
+    });
+  } catch (error) {
+    console.error('Upload photo error:', error);
+    res.status(500).json({ error: 'Failed to upload photo' });
+  }
+});
 
 module.exports = router;

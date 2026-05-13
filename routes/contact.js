@@ -224,7 +224,7 @@ router.post('/unlock-tradie',
       );
 
       // Remove password hash
-      delete tasker.password_hash;
+      delete tasker.password;
 
       res.json({ 
         message: 'Tradie unlocked successfully',
@@ -387,6 +387,62 @@ router.get('/my-contacts', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Get contacts error:', error);
     res.status(500).json({ error: 'Failed to get contacts' });
+  }
+});
+
+// GET /api/contact/unlocked-tradies - Get all tradies the customer has unlocked
+router.get('/unlocked-tradies', authenticateToken, async (req, res) => {
+  try {
+    const tradies = await query(
+      `SELECT 
+        u.id,
+        u.name,
+        u.email,
+        u.phone,
+        u.business_name,
+        u.profile_photo_url,
+        GROUP_CONCAT(DISTINCT p.name) as professions,
+        ct.created_at as unlock_date,
+        ct.job_id,
+        j.title as job_title,
+        COALESCE(AVG(r.stars), 0) as avg_rating,
+        COUNT(DISTINCT r.id) as review_count
+      FROM contact_transactions ct
+      JOIN users u ON ct.to_user_id = u.id
+      LEFT JOIN jobs j ON ct.job_id = j.id
+      LEFT JOIN user_professions up ON u.id = up.user_id
+      LEFT JOIN professions p ON up.profession_id = p.id
+      LEFT JOIN reviews r ON r.reviewee_id = u.id
+      WHERE ct.from_user_id = ? 
+        AND ct.type IN ('poster-unlock-tradie', 'poster-3-pack', 'poster-20-pack')
+      GROUP BY u.id, ct.created_at, ct.job_id, j.title
+      ORDER BY ct.created_at DESC`,
+      [req.user.id]
+    );
+
+    // Format the response
+    const formattedTradies = tradies.map(tradie => ({
+      id: tradie.id,
+      name: tradie.name,
+      email: tradie.email,
+      phone: tradie.phone,
+      business_name: tradie.business_name,
+      profile_photo_url: tradie.profile_photo_url,
+      professions: tradie.professions ? tradie.professions.split(',') : [],
+      rating: parseFloat(tradie.avg_rating).toFixed(1),
+      review_count: tradie.review_count,
+      unlock_date: tradie.unlock_date,
+      job_id: tradie.job_id,
+      job_title: tradie.job_title
+    }));
+
+    res.json({ 
+      tradies: formattedTradies,
+      count: formattedTradies.length
+    });
+  } catch (error) {
+    console.error('Get unlocked tradies error:', error);
+    res.status(500).json({ error: 'Failed to get unlocked tradies' });
   }
 });
 

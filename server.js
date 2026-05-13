@@ -15,7 +15,10 @@ const webhookRoutes = require('./routes/webhooks');
 app.use('/api/webhooks', webhookRoutes);
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: ['https://tradietasker.com.au', 'http://localhost:5173'],
+  credentials: true
+}));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
@@ -87,6 +90,11 @@ const adminRoutes = require('./routes/admin');
 const stripeRoutes = require('./routes/stripe');
 const profileUnlockRoutes = require('./routes/profileUnlocks');
 const customerRoutes = require('./routes/customers');
+const transactionRoutes = require('./routes/transactions');
+const messageRoutes = require('./routes/messages');
+const invoiceRoutes = require('./routes/invoices');
+const adminSettingsRoutes = require('./routes/adminSettings');
+const migrationRoutes = require('./routes/migrations');
 
 // Mount routes
 app.use('/api/auth', authRoutes);
@@ -103,6 +111,11 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/stripe', stripeRoutes);
 app.use('/api/profile-unlocks', profileUnlockRoutes);
 app.use('/api/customers', customerRoutes);
+app.use('/api/transactions', transactionRoutes);
+app.use('/api/messages', messageRoutes);
+app.use('/api/invoices', invoiceRoutes);
+app.use('/api/admin/settings', adminSettingsRoutes);
+app.use('/api/migrations', migrationRoutes);
 
 // Error handler
 app.use((err, req, res, next) => {

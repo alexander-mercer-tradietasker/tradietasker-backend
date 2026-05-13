@@ -28,8 +28,12 @@
     "express": "^5.2.1",
     "express-validator": "^7.3.2",
     "jsonwebtoken": "^9.0.3",
+    "nodemailer": "^8.0.7",
+    "pdfkit": "^0.18.0",
+    "pg": "^8.20.0",
     "sqlite3": "^5.1.7",
-    "stripe": "^22.1.1"
+    "stripe": "^22.1.1",
+    "uuid": "^14.0.0"
   },
   "devDependencies": {
     "nodemon": "^3.0.0"

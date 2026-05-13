@@ -174,7 +174,7 @@ router.get('/:id', optionalAuth, async (req, res) => {
     const isGod = req.user && req.user.tier === 'god';
 
     // Remove sensitive fields
-    delete tasker.password_hash;
+    delete tasker.password;
     delete tasker.credits;
 
     if (!isOwner && !isUnlocked && !isGod) {

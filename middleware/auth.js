@@ -119,6 +119,21 @@ function requireGodTier(req, res, next) {
   next();
 }
 
+// Admin access (god tier or admin role)
+function requireAdmin(req, res, next) {
+  if (!req.user) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+
+  const isAdmin = req.user.tier === 'god' || req.user.role === 'admin';
+  
+  if (!isAdmin) {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+
+  next();
+}
+
 // Generate JWT token
 function generateToken(userId) {
   return jwt.sign({ userId }, JWT_SECRET, { expiresIn: '7d' });
@@ -130,6 +145,7 @@ module.exports = {
   requireRole,
   requireTier,
   requireGodTier,
+  requireAdmin,
   generateToken,
   JWT_SECRET
 };

@@ -35,7 +35,7 @@ router.post('/register',
 
       // Create user
       const result = await run(
-        `INSERT INTO users (email, password_hash, name, phone, role, tier, credits)
+        `INSERT INTO users (email, password, name, phone, role, tier, credits)
          VALUES (?, ?, ?, ?, ?, 'free', 0) RETURNING id`,
         [email, passwordHash, name, phone || null, role]
       );
@@ -80,7 +80,7 @@ router.post('/login',
       }
 
       // Verify password
-      const validPassword = await bcrypt.compare(password, user.password_hash);
+      const validPassword = await bcrypt.compare(password, user.password);
       if (!validPassword) {
         return res.status(401).json({ error: 'Invalid email or password' });
       }
@@ -89,7 +89,7 @@ router.post('/login',
       const token = generateToken(user.id);
 
       // Don't send password hash
-      delete user.password_hash;
+      delete user.password;
 
       res.json({
         message: 'Login successful',
