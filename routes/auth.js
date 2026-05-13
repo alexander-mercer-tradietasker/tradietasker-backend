@@ -80,7 +80,7 @@ router.post('/login',
       }
 
       // Verify password
-      const validPassword = await bcrypt.compare(password, user.password);
+      const validPassword = await bcrypt.compare(password, user.password_hash);
       if (!validPassword) {
         return res.status(401).json({ error: 'Invalid email or password' });
       }
@@ -89,7 +89,7 @@ router.post('/login',
       const token = generateToken(user.id);
 
       // Don't send password hash
-      delete user.password;
+      delete user.password_hash;
 
       res.json({
         message: 'Login successful',
