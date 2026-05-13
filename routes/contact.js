@@ -401,7 +401,7 @@ router.get('/unlocked-tradies', authenticateToken, async (req, res) => {
         u.phone,
         u.business_name,
         u.profile_photo_url,
-        GROUP_CONCAT(DISTINCT p.name) as professions,
+        STRING_AGG(DISTINCT p.name, ', ') as professions,
         ct.created_at as unlock_date,
         ct.job_id,
         j.title as job_title,
@@ -415,7 +415,7 @@ router.get('/unlocked-tradies', authenticateToken, async (req, res) => {
       LEFT JOIN reviews r ON r.reviewee_id = u.id
       WHERE ct.from_user_id = ? 
         AND ct.type IN ('poster-unlock-tradie', 'poster-3-pack', 'poster-20-pack')
-      GROUP BY u.id, ct.created_at, ct.job_id, j.title
+      GROUP BY u.id, u.name, u.email, u.phone, u.business_name, u.profile_photo_url, ct.created_at, ct.job_id, j.title
       ORDER BY ct.created_at DESC`,
       [req.user.id]
     );
