@@ -197,6 +197,21 @@ async function initializeDatabase() {
       }
     } else {
       console.log(`✓ Database ready (${tableCount} tables)`);
+      
+      // Check if messages table exists, create if missing
+      const messagesCheck = await pool.query(`
+        SELECT EXISTS (
+          SELECT FROM information_schema.tables 
+          WHERE table_schema = 'public' AND table_name = 'messages'
+        );
+      `);
+      
+      if (!messagesCheck.rows[0].exists) {
+        console.log('Messages table missing, creating...');
+        const msgMigration = fs.readFileSync(path.join(__dirname, 'migrations', '004_create_messages.sql'), 'utf8');
+        await pool.query(msgMigration);
+        console.log('✓ Messages table created');
+      }
     }
   } catch (error) {
     console.error('Database initialization error:', error.message);
