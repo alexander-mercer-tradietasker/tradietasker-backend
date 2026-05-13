@@ -96,6 +96,7 @@ const invoiceRoutes = require('./routes/invoices');
 const adminSettingsRoutes = require('./routes/adminSettings');
 const migrationRoutes = require('./routes/migrations');
 const migrateOnceRoute = require('./routes/migrate-once');
+const customerDashboardRoutes = require('./routes/customer-dashboard');
 
 // Mount routes
 app.use('/api/auth', authRoutes);
@@ -118,6 +119,8 @@ app.use('/api/invoices', invoiceRoutes);
 app.use('/api/admin/settings', adminSettingsRoutes);
 app.use('/api/migrations', migrationRoutes);
 app.use('/api/migrate-once', migrateOnceRoute);
+app.use('/api/customer-dashboard/jobs', customerDashboardRoutes);
+app.use('/api/customer-dashboard/users/me', customerDashboardRoutes);
 
 // Error handler
 app.use((err, req, res, next) => {
