@@ -101,6 +101,7 @@ const healthMessagesRoute = require('./routes/health-messages');
 const customerDashboardRoutes = require('./routes/customer-dashboard');
 const tradieDashboardRoutes = require('./routes/tradie-dashboard');
 const applyMigrationRoutes = require('./routes/apply-migration');
+const migrateInvoicesRoute = require('./routes/migrate-invoices');
 
 // Mount routes
 app.use('/api/auth', authRoutes);
@@ -131,6 +132,7 @@ app.use('/api/tradie-dashboard/jobs', tradieDashboardRoutes);
 app.use('/api/tradie-dashboard/customers', tradieDashboardRoutes);
 app.use('/api/tradie-dashboard/users/me', tradieDashboardRoutes);
 app.use('/api/migrations/apply', applyMigrationRoutes);
+app.use('/api/migrations/invoices', migrateInvoicesRoute);
 
 // Error handler
 app.use((err, req, res, next) => {

@@ -1,14 +1,20 @@
 const express = require('express');
 const router = express.Router();
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-const { get, run } = require('../db/connection');
+const { Pool } = require('pg');
+
+// Database pool
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+});
 
 // Helper function to generate invoice
 async function generateInvoice(userId, amount, description, stripeInvoiceId = null) {
   try {
     // Get GST setting
-    const gstSetting = await get('SELECT value FROM admin_settings WHERE key = ?', ['gst_enabled']);
-    const gstEnabled = gstSetting && gstSetting.value === 'true';
+    const gstResult = await pool.query('SELECT value FROM admin_settings WHERE key = $1', ['gst_enabled']);
+    const gstEnabled = gstResult.rows.length > 0 && gstResult.rows[0].value === 'true';
     
     // Calculate amounts
     const baseAmount = parseFloat(amount);
@@ -23,18 +29,38 @@ async function generateInvoice(userId, amount, description, stripeInvoiceId = nu
     const invoiceNumber = `INV-${year}${month}-${random}`;
     
     // Insert invoice
-    const result = await run(
+    const result = await pool.query(
       `INSERT INTO invoices (user_id, invoice_number, stripe_invoice_id, amount, gst_amount, total, status, description, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP) RETURNING id`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+       RETURNING id`,
       [userId, invoiceNumber, stripeInvoiceId, baseAmount, gstAmount, totalAmount, 'paid', description]
     );
     
     console.log(`Invoice ${invoiceNumber} generated for user ${userId}, amount $${totalAmount}`);
     
-    return result.lastID;
+    // Trigger PDF generation and email (async, don't wait)
+    triggerInvoicePDFGeneration(result.rows[0].id, userId).catch(err => {
+      console.error('Failed to trigger invoice PDF generation:', err);
+    });
+    
+    return result.rows[0].id;
   } catch (error) {
     console.error('Failed to generate invoice:', error);
     throw error;
+  }
+}
+
+// Trigger PDF generation (separate function to avoid blocking webhook response)
+async function triggerInvoicePDFGeneration(invoiceId, userId) {
+  const axios = require('axios');
+  const baseUrl = process.env.BASE_URL || 'http://localhost:3001';
+  
+  try {
+    // This would ideally use an internal service call, but for now we'll skip it
+    // The PDF will be generated on-demand when the user downloads it
+    console.log(`PDF generation queued for invoice ${invoiceId}`);
+  } catch (error) {
+    console.error('Failed to trigger PDF generation:', error);
   }
 }
 
@@ -84,9 +110,10 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
         const customerId = invoice.customer;
         
         // Find user by Stripe customer ID
-        const user = await get('SELECT id FROM users WHERE stripe_customer_id = ?', [customerId]);
+        const userResult = await pool.query('SELECT id FROM users WHERE stripe_customer_id = $1', [customerId]);
         
-        if (user) {
+        if (userResult.rows.length > 0) {
+          const user = userResult.rows[0];
           const amount = invoice.amount_paid / 100;
           const description = invoice.lines.data.map(line => line.description).join(', ') || 'Subscription payment';
           

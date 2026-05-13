@@ -1,11 +1,17 @@
 const express = require('express');
 const router = express.Router();
-const { query, get, run } = require('../db/connection');
-const { authenticateToken } = require('../middleware/auth');
+const { Pool } = require('pg');
+const { authenticateToken, isAdmin } = require('../middleware/auth');
 const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
 const nodemailer = require('nodemailer');
+
+// Database pool
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+});
 
 // Ensure invoices directory exists
 const INVOICES_DIR = path.join(__dirname, '..', 'invoices');
@@ -49,8 +55,11 @@ async function generateInvoicePDF(invoice, user, businessDetails, gstEnabled) {
 
     // Business details
     doc.fontSize(10);
-    doc.text(businessDetails.business_name || 'TradieTasker', { align: 'left' });
+    doc.text(businessDetails.business_name || 'Drachen Pty Ltd', { align: 'left' });
     doc.text(`ABN: ${businessDetails.business_abn || '72 688 296 013'}`);
+    if (gstEnabled) {
+      doc.text('GST Registered');
+    }
     doc.moveDown();
 
     // Invoice details
@@ -76,17 +85,17 @@ async function generateInvoicePDF(invoice, user, businessDetails, gstEnabled) {
     doc.fontSize(10);
     
     doc.text('Subtotal:', 350, y);
-    doc.text(`$${parseFloat(invoice.amount).toFixed(2)}`, 450, y, { align: 'right' });
+    doc.text(`$${parseFloat(invoice.amount).toFixed(2)}`, 450, y, { align: 'right', width: 100 });
     
     if (gstEnabled && invoice.gst_amount > 0) {
       doc.text('GST (10%):', 350, y + 20);
-      doc.text(`$${parseFloat(invoice.gst_amount).toFixed(2)}`, 450, y + 20, { align: 'right' });
+      doc.text(`$${parseFloat(invoice.gst_amount).toFixed(2)}`, 450, y + 20, { align: 'right', width: 100 });
     }
     
     doc.fontSize(12).font('Helvetica-Bold');
     const totalY = gstEnabled && invoice.gst_amount > 0 ? y + 40 : y + 20;
     doc.text('Total:', 350, totalY);
-    doc.text(`$${parseFloat(invoice.total).toFixed(2)}`, 450, totalY, { align: 'right' });
+    doc.text(`$${parseFloat(invoice.total).toFixed(2)}`, 450, totalY, { align: 'right', width: 100 });
 
     doc.moveDown(3);
     doc.fontSize(9).font('Helvetica').text('Thank you for your business!', { align: 'center' });
@@ -136,11 +145,11 @@ async function sendInvoiceEmail(user, invoice, pdfPath) {
 router.get('/', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
-    const invoices = await query(
-      'SELECT * FROM invoices WHERE user_id = ? ORDER BY created_at DESC',
+    const result = await pool.query(
+      'SELECT * FROM invoices WHERE user_id = $1 ORDER BY created_at DESC',
       [userId]
     );
-    res.json(invoices);
+    res.json(result.rows);
   } catch (error) {
     console.error('Error fetching invoices:', error);
     res.status(500).json({ error: 'Failed to fetch invoices' });
@@ -153,16 +162,16 @@ router.get('/:id', authenticateToken, async (req, res) => {
     const userId = req.user.id;
     const invoiceId = req.params.id;
     
-    const invoice = await get(
-      'SELECT * FROM invoices WHERE id = ? AND user_id = ?',
+    const result = await pool.query(
+      'SELECT * FROM invoices WHERE id = $1 AND user_id = $2',
       [invoiceId, userId]
     );
     
-    if (!invoice) {
+    if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Invoice not found' });
     }
     
-    res.json(invoice);
+    res.json(result.rows[0]);
   } catch (error) {
     console.error('Error fetching invoice:', error);
     res.status(500).json({ error: 'Failed to fetch invoice' });
@@ -175,14 +184,16 @@ router.get('/:id/pdf', authenticateToken, async (req, res) => {
     const userId = req.user.id;
     const invoiceId = req.params.id;
     
-    const invoice = await get(
-      'SELECT * FROM invoices WHERE id = ? AND user_id = ?',
+    const result = await pool.query(
+      'SELECT * FROM invoices WHERE id = $1 AND user_id = $2',
       [invoiceId, userId]
     );
     
-    if (!invoice) {
+    if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Invoice not found' });
     }
+    
+    const invoice = result.rows[0];
     
     // If Stripe invoice URL exists, redirect to it
     if (invoice.stripe_invoice_id && invoice.pdf_url && invoice.pdf_url.startsWith('http')) {
@@ -194,15 +205,17 @@ router.get('/:id/pdf', authenticateToken, async (req, res) => {
     
     if (!fs.existsSync(pdfPath)) {
       // Generate PDF if it doesn't exist
-      const user = await get('SELECT * FROM users WHERE id = ?', [userId]);
-      const gstSetting = await get('SELECT value FROM admin_settings WHERE key = ?', ['gst_enabled']);
-      const abn = await get('SELECT value FROM admin_settings WHERE key = ?', ['business_abn']);
-      const bizName = await get('SELECT value FROM admin_settings WHERE key = ?', ['business_name']);
+      const userResult = await pool.query('SELECT * FROM users WHERE id = $1', [userId]);
+      const user = userResult.rows[0];
       
-      const gstEnabled = gstSetting && gstSetting.value === 'true';
+      const gstResult = await pool.query('SELECT value FROM admin_settings WHERE key = $1', ['gst_enabled']);
+      const abnResult = await pool.query('SELECT value FROM admin_settings WHERE key = $1', ['business_abn']);
+      const nameResult = await pool.query('SELECT value FROM admin_settings WHERE key = $1', ['business_name']);
+      
+      const gstEnabled = gstResult.rows.length > 0 && gstResult.rows[0].value === 'true';
       const businessDetails = {
-        business_abn: abn ? abn.value : '72 688 296 013',
-        business_name: bizName ? bizName.value : 'Drachen Pty Ltd'
+        business_abn: abnResult.rows.length > 0 ? abnResult.rows[0].value : '72 688 296 013',
+        business_name: nameResult.rows.length > 0 ? nameResult.rows[0].value : 'Drachen Pty Ltd'
       };
       
       await generateInvoicePDF(invoice, user, businessDetails, gstEnabled);
@@ -230,8 +243,8 @@ router.post('/generate', authenticateToken, async (req, res) => {
     const targetUserId = userId || req.user.id;
     
     // Get GST setting
-    const gstSetting = await get('SELECT value FROM admin_settings WHERE key = ?', ['gst_enabled']);
-    const gstEnabled = gstSetting && gstSetting.value === 'true';
+    const gstResult = await pool.query('SELECT value FROM admin_settings WHERE key = $1', ['gst_enabled']);
+    const gstEnabled = gstResult.rows.length > 0 && gstResult.rows[0].value === 'true';
     
     // Calculate amounts
     const baseAmount = parseFloat(amount);
@@ -242,34 +255,35 @@ router.post('/generate', authenticateToken, async (req, res) => {
     const invoiceNumber = generateInvoiceNumber();
     
     // Insert invoice
-    const result = await run(
+    const result = await pool.query(
       `INSERT INTO invoices (user_id, invoice_number, stripe_invoice_id, amount, gst_amount, total, status, description, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP) RETURNING id`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+       RETURNING *`,
       [targetUserId, invoiceNumber, stripeInvoiceId || null, baseAmount, gstAmount, totalAmount, status, description]
     );
     
-    const invoiceId = result.lastID;
-    const invoice = await get('SELECT * FROM invoices WHERE id = ?', [invoiceId]);
+    const invoice = result.rows[0];
     
     // Get user details
-    const user = await get('SELECT * FROM users WHERE id = ?', [targetUserId]);
+    const userResult = await pool.query('SELECT * FROM users WHERE id = $1', [targetUserId]);
+    const user = userResult.rows[0];
     
     // Get business details
-    const abn = await get('SELECT value FROM admin_settings WHERE key = ?', ['business_abn']);
-    const bizName = await get('SELECT value FROM admin_settings WHERE key = ?', ['business_name']);
+    const abnResult = await pool.query('SELECT value FROM admin_settings WHERE key = $1', ['business_abn']);
+    const nameResult = await pool.query('SELECT value FROM admin_settings WHERE key = $1', ['business_name']);
     
     const businessDetails = {
-      business_abn: abn ? abn.value : '72 688 296 013',
-      business_name: bizName ? bizName.value : 'Drachen Pty Ltd'
+      business_abn: abnResult.rows.length > 0 ? abnResult.rows[0].value : '72 688 296 013',
+      business_name: nameResult.rows.length > 0 ? nameResult.rows[0].value : 'Drachen Pty Ltd'
     };
     
     // Generate PDF
     const pdfPath = await generateInvoicePDF(invoice, user, businessDetails, gstEnabled);
     
     // Update invoice with PDF URL
-    await run(
-      'UPDATE invoices SET pdf_url = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-      [`/api/invoices/${invoiceId}/pdf`, invoiceId]
+    await pool.query(
+      'UPDATE invoices SET pdf_url = $1, updated_at = NOW() WHERE id = $2',
+      [`/api/invoices/${invoice.id}/pdf`, invoice.id]
     );
     
     // Send email
@@ -279,12 +293,47 @@ router.post('/generate', authenticateToken, async (req, res) => {
       message: 'Invoice generated successfully',
       invoice: {
         ...invoice,
-        pdf_url: `/api/invoices/${invoiceId}/pdf`
+        pdf_url: `/api/invoices/${invoice.id}/pdf`
       }
     });
   } catch (error) {
     console.error('Error generating invoice:', error);
     res.status(500).json({ error: 'Failed to generate invoice' });
+  }
+});
+
+// GET /api/admin/settings/gst - Get GST setting (admin only)
+router.get('/admin/gst', authenticateToken, isAdmin, async (req, res) => {
+  try {
+    const result = await pool.query('SELECT value FROM admin_settings WHERE key = $1', ['gst_enabled']);
+    const gstEnabled = result.rows.length > 0 && result.rows[0].value === 'true';
+    res.json({ gst_enabled: gstEnabled });
+  } catch (error) {
+    console.error('Error fetching GST setting:', error);
+    res.status(500).json({ error: 'Failed to fetch GST setting' });
+  }
+});
+
+// PUT /api/admin/settings/gst - Update GST setting (admin only)
+router.put('/admin/gst', authenticateToken, isAdmin, async (req, res) => {
+  try {
+    const { gst_enabled } = req.body;
+    
+    await pool.query(
+      `INSERT INTO admin_settings (key, value, updated_at) 
+       VALUES ($1, $2, NOW()) 
+       ON CONFLICT (key) 
+       DO UPDATE SET value = $2, updated_at = NOW()`,
+      ['gst_enabled', gst_enabled ? 'true' : 'false']
+    );
+    
+    res.json({ 
+      message: 'GST setting updated successfully',
+      gst_enabled: gst_enabled 
+    });
+  } catch (error) {
+    console.error('Error updating GST setting:', error);
+    res.status(500).json({ error: 'Failed to update GST setting' });
   }
 });
 

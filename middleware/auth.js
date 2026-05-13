@@ -1,7 +1,13 @@
 const jwt = require('jsonwebtoken');
-const { get } = require('../db/connection');
+const { Pool } = require('pg');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'tradietasker-secret-key-change-in-production';
+
+// Database pool
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+});
 
 // Verify JWT token
 function authenticateToken(req, res, next) {
@@ -19,7 +25,8 @@ function authenticateToken(req, res, next) {
 
     try {
       // Load user from database
-      const user = await get('SELECT * FROM users WHERE id = ?', [decoded.userId]);
+      const result = await pool.query('SELECT * FROM users WHERE id = $1', [decoded.userId]);
+      const user = result.rows[0];
       
       if (!user) {
         return res.status(404).json({ error: 'User not found' });
@@ -52,7 +59,8 @@ function optionalAuth(req, res, next) {
     }
 
     try {
-      const user = await get('SELECT * FROM users WHERE id = ?', [decoded.userId]);
+      const result = await pool.query('SELECT * FROM users WHERE id = $1', [decoded.userId]);
+      const user = result.rows[0];
       req.user = user || null;
       next();
     } catch (error) {
@@ -146,6 +154,7 @@ module.exports = {
   requireTier,
   requireGodTier,
   requireAdmin,
+  isAdmin: requireAdmin, // Alias for consistency
   generateToken,
   JWT_SECRET
 };

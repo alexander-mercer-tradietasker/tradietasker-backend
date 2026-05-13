@@ -1,0 +1,19 @@
+
+> tradietasker-backend@2.1.0 start
+> node check-db.js && node server.js
+
+================================================================================
+Database Check
+================================================================================
+Database type: SQLite
+DATABASE_URL set: false
+Database path: /home/michael/.openclaw/workspace/tradietasker-backend-fresh/db/tradietasker.db
+Database exists: true
+✓ SQLite database exists
+================================================================================
+
+◇ injected env (6) from .env // tip: ⌘ custom filepath { path: '/custom/path/.env' }
+Using SQLite - no initialization needed
+TradieTasker backend running on port 3001
+Environment: development
+Connected to SQLite database at: /home/michael/.openclaw/workspace/tradietasker-backend-fresh/db/tradietasker.db
