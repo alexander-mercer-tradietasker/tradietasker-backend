@@ -113,12 +113,7 @@ router.get('/', optionalAuth, async (req, res) => {
       return sanitized;
     });
 
-    res.json({ 
-      jobs: sanitizedJobs,
-      count: sanitizedJobs.length,
-      userTier,
-      earlyAccessHours: delayHours
-    });
+    res.json(sanitizedJobs);
   } catch (error) {
     console.error('Browse jobs error:', error);
     res.status(500).json({ error: 'Failed to browse jobs' });
@@ -612,7 +607,7 @@ router.get('/:id/unlocked-tradies', authenticateToken, async (req, res) => {
       [req.user.id, req.params.id]
     );
     
-    res.json({ tradies });
+    res.json(tradies);
   } catch (error) {
     console.error('Get unlocked tradies error:', error);
     res.status(500).json({ error: 'Failed to get unlocked tradies' });
