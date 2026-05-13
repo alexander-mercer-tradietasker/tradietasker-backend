@@ -97,7 +97,7 @@ router.get('/jobs/my-jobs', verifyTradie, async (req, res) => {
 
     const jobs = await query(sql, params);
 
-    res.json({ jobs });
+    res.json(jobs);
   } catch (error) {
     console.error('Error fetching tradie jobs:', error);
     res.status(500).json({ error: 'Failed to fetch jobs' });
