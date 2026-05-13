@@ -79,6 +79,12 @@ router.post('/login',
         return res.status(401).json({ error: 'Invalid email or password' });
       }
 
+      // Check if password_hash exists
+      if (!user.password_hash) {
+        console.error('Login error: password_hash is missing for user:', user.email);
+        return res.status(401).json({ error: 'Invalid email or password' });
+      }
+
       // Verify password
       const validPassword = await bcrypt.compare(password, user.password_hash);
       if (!validPassword) {
