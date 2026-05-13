@@ -95,6 +95,7 @@ const messageRoutes = require('./routes/messages');
 const invoiceRoutes = require('./routes/invoices');
 const adminSettingsRoutes = require('./routes/adminSettings');
 const migrationRoutes = require('./routes/migrations');
+const migrateOnceRoute = require('./routes/migrate-once');
 
 // Mount routes
 app.use('/api/auth', authRoutes);
@@ -116,6 +117,7 @@ app.use('/api/messages', messageRoutes);
 app.use('/api/invoices', invoiceRoutes);
 app.use('/api/admin/settings', adminSettingsRoutes);
 app.use('/api/migrations', migrationRoutes);
+app.use('/api/migrate-once', migrateOnceRoute);
 
 // Error handler
 app.use((err, req, res, next) => {
