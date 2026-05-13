@@ -44,14 +44,26 @@ router.post('/register',
       // Use password_hash for PostgreSQL, password for SQLite
       const passwordColumn = isPostgres ? 'password_hash' : 'password';
       
-      const result = await run(
-        `INSERT INTO users (email, ${passwordColumn}, name, phone, role, tier, credits, profile_completed)
-         VALUES (?, ?, ?, ?, ?, 'free', 0, ?)`,
-        [email, passwordHash, name, phone || null, role, profileCompleted]
-      );
-
-      // Get created user
-      const user = await get('SELECT id, email, name, phone, role, tier, credits, profile_completed FROM users WHERE id = ?', [result.lastID]);
+      const isPostgresEnv = !!process.env.DATABASE_URL;
+      let user;
+      
+      if (isPostgresEnv) {
+        // Postgres: Use RETURNING clause
+        user = await get(
+          `INSERT INTO users (email, ${passwordColumn}, name, phone, role, tier, credits, profile_completed)
+           VALUES (?, ?, ?, ?, ?, 'free', 0, ?)
+           RETURNING id, email, name, phone, role, tier, credits, profile_completed`,
+          [email, passwordHash, name, phone || null, role, profileCompleted]
+        );
+      } else {
+        // SQLite: Use lastID
+        const result = await run(
+          `INSERT INTO users (email, ${passwordColumn}, name, phone, role, tier, credits, profile_completed)
+           VALUES (?, ?, ?, ?, ?, 'free', 0, ?)`,
+          [email, passwordHash, name, phone || null, role, profileCompleted]
+        );
+        user = await get('SELECT id, email, name, phone, role, tier, credits, profile_completed FROM users WHERE id = ?', [result.lastID]);
+      }
 
       // Generate token
       const token = generateToken(user.id);
