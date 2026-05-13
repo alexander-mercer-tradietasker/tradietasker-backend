@@ -66,10 +66,7 @@ router.get('/my-jobs', authenticateToken, async (req, res) => {
       }
     });
     
-    res.json({
-      jobs,
-      count: jobs.length
-    });
+    res.json(jobs);
   } catch (error) {
     console.error('Get my jobs error:', error);
     res.status(500).json({ error: 'Failed to get jobs' });
