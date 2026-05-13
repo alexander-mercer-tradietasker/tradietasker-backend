@@ -383,7 +383,7 @@ router.get('/my-contacts', authenticateToken, async (req, res) => {
       [req.user.id, req.user.id, req.user.id, req.user.id, req.user.id]
     );
 
-    res.json({ contacts });
+    res.json(contacts);
   } catch (error) {
     console.error('Get contacts error:', error);
     res.status(500).json({ error: 'Failed to get contacts' });

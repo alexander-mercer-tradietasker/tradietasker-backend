@@ -27,10 +27,7 @@ router.get('/my-customers', authenticateToken, async (req, res) => {
 
     const customers = await query(sql, [req.user.id]);
 
-    res.json({
-      customers,
-      count: customers.length
-    });
+    res.json(customers);
   } catch (error) {
     console.error('Get my customers error:', error);
     res.status(500).json({ error: 'Failed to get customers' });
