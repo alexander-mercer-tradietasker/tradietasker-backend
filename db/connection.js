@@ -13,7 +13,6 @@ function initDb() {
     if (!pool) {
       pool = new Pool({
         connectionString: process.env.DATABASE_URL,
-        ssl: false
       });
       
       pool.on('error', (err) => {

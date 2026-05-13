@@ -4,7 +4,6 @@ const fs = require('fs');
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: false
 });
 
 async function test() {

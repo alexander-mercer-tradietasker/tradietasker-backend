@@ -7,7 +7,6 @@ const DATABASE_URL = process.env.RAILWAY_DATABASE_URL || process.env.DATABASE_UR
 async function createTestUser() {
   const pool = new Pool({
     connectionString: DATABASE_URL,
-    ssl: false
   });
 
   try {

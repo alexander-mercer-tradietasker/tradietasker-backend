@@ -66,7 +66,6 @@ async function runMigration() {
 
   const pool = new Pool({
     connectionString,
-    ssl: false
   });
 
   try {

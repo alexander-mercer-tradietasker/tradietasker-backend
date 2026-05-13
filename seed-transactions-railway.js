@@ -12,7 +12,6 @@ if (!DATABASE_URL) {
 async function seedTransactions() {
   const pool = new Pool({
     connectionString: DATABASE_URL,
-    ssl: false
   });
 
   try {
