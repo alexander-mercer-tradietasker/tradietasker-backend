@@ -51,7 +51,7 @@ router.get('/', optionalAuth, async (req, res) => {
 
     // Tier-based visibility (unless god tier)
     if (userTier !== 'god') {
-      sql += ` AND j.is_god_tier = 0`;
+      sql += ` AND j.is_god_tier = false`;
       
       if (delayHours > 0) {
         sql += ` AND j.created_at <= datetime('now', '-${delayHours} hours')`;
