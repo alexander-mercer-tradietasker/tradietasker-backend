@@ -216,3 +216,4 @@ initializeDatabase()
     console.error('Startup failed:', error);
     process.exit(1);
   });
+// Force redeploy
