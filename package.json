@@ -9,7 +9,7 @@
     "migrate:prod": "node migrate.js $DATABASE_URL",
     "seed": "node seed-expanded-test-data.js",
     "test": "node test-schema.js",
-    "start": "node check-db.js && node server.js",
+    "start": "node init-db.js && node server.js",
     "dev": "nodemon server.js"
   },
   "keywords": [
