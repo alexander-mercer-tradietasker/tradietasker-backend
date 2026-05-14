@@ -129,7 +129,7 @@ CREATE TABLE IF NOT EXISTS subscriptions (
 -- ============================================
 CREATE TABLE IF NOT EXISTS jobs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  poster_id INTEGER NOT NULL,
+  user_id INTEGER NOT NULL,
   poster_name TEXT NOT NULL,
   title TEXT NOT NULL,
   category TEXT NOT NULL, -- Legacy field, will map to job_type_id
@@ -152,10 +152,16 @@ CREATE TABLE IF NOT EXISTS jobs (
   -- God Tier
   is_god_tier BOOLEAN DEFAULT 0, -- Only visible to god-tier users
   
+  -- Location Fields (added for structured filtering)
+  postcode TEXT,
+  suburb TEXT,
+  state TEXT,
+  urgency TEXT DEFAULT 'flexible', -- 'urgent', 'this-week', 'this-month', 'flexible'
+  
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   
-  FOREIGN KEY (poster_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
   FOREIGN KEY (job_type_id) REFERENCES job_types(id),
   FOREIGN KEY (awarded_to_user_id) REFERENCES users(id)
 );
@@ -238,7 +244,7 @@ CREATE INDEX IF NOT EXISTS idx_job_types_category ON job_types(category);
 CREATE INDEX IF NOT EXISTS idx_user_professions_user ON user_professions(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_job_types_user ON user_job_types(user_id);
 CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
-CREATE INDEX IF NOT EXISTS idx_jobs_poster ON jobs(poster_id);
+CREATE INDEX IF NOT EXISTS idx_jobs_poster ON jobs(user_id);
 CREATE INDEX IF NOT EXISTS idx_jobs_job_type ON jobs(job_type_id);
 CREATE INDEX IF NOT EXISTS idx_jobs_is_god_tier ON jobs(is_god_tier);
 CREATE INDEX IF NOT EXISTS idx_applications_job ON applications(job_id);
