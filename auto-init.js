@@ -65,8 +65,26 @@ async function recordMigration(pool, migrationName) {
   }
 }
 
+async function tableExists(pool, tableName) {
+  try {
+    const result = await pool.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = $1
+      ) as exists
+    `, [tableName]);
+    return result.rows[0].exists;
+  } catch (error) {
+    return false;
+  }
+}
+
 async function tableHasRows(pool, tableName) {
   try {
+    const exists = await tableExists(pool, tableName);
+    if (!exists) return false;
+    
     const result = await pool.query(`SELECT EXISTS (SELECT 1 FROM ${tableName} LIMIT 1) as has_rows`);
     return result.rows[0].has_rows;
   } catch (error) {
@@ -75,7 +93,7 @@ async function tableHasRows(pool, tableName) {
   }
 }
 
-async function runSqlFile(pool, filePath, migrationName, skipIfExists = false) {
+async function runSqlFile(pool, filePath, migrationName) {
   const absolutePath = path.join(__dirname, filePath);
   
   if (!fs.existsSync(absolutePath)) {
@@ -94,26 +112,43 @@ async function runSqlFile(pool, filePath, migrationName, skipIfExists = false) {
     
     console.log(`   📝 ${migrationName}: ${statements.length} statements`);
     
+    let appliedCount = 0;
+    let skippedCount = 0;
+    
     for (const statement of statements) {
-      if (statement.trim()) {
-        try {
-          await pool.query(statement);
-        } catch (error) {
-          // If it's an "already exists" error and we're skipping, that's OK
-          if (skipIfExists && (
-            error.code === '42P07' || // relation already exists
+      if (!statement.trim()) continue;
+      
+      try {
+        await pool.query(statement);
+        appliedCount++;
+      } catch (error) {
+        // If it's an "already exists" error, that's OK - skip it
+        if (error.code === '42P07' || // relation already exists
             error.code === '42701' || // column already exists
-            error.code === '23505'    // unique violation
-          )) {
-            console.log(`   ℹ️  Skipping already-applied statement`);
-            continue;
-          }
-          throw error;
+            error.code === '42710' || // object already exists
+            error.code === '23505') { // unique violation
+          skippedCount++;
+          continue;
         }
+        
+        // If a table/column doesn't exist in ALTER TABLE, warn but continue
+        if (error.code === '42P01' || // undefined table
+            error.code === '42703') { // undefined column
+          console.warn(`   ⚠️  Skipping statement (missing dependency): ${error.message.split('\n')[0]}`);
+          skippedCount++;
+          continue;
+        }
+        
+        // Other errors are fatal
+        throw error;
       }
     }
     
-    console.log(`   ✅ ${migrationName}`);
+    if (skippedCount > 0) {
+      console.log(`   ✅ ${migrationName} (${appliedCount} applied, ${skippedCount} skipped)`);
+    } else {
+      console.log(`   ✅ ${migrationName}`);
+    }
     return true;
   } catch (error) {
     console.error(`   ❌ Error in ${migrationName}:`, error.message);
@@ -125,16 +160,12 @@ async function applyBaseSchema(pool) {
   console.log('📋 Checking base schema...');
   
   // Check if users table exists
-  const result = await pool.query(`
-    SELECT EXISTS (
-      SELECT FROM information_schema.tables 
-      WHERE table_schema = 'public' 
-      AND table_name = 'users'
-    ) as exists
-  `);
+  const usersExists = await tableExists(pool, 'users');
   
-  if (result.rows[0].exists) {
+  if (usersExists) {
     console.log('ℹ️  Base schema already exists, skipping');
+    // Still record it as applied if not already recorded
+    await recordMigration(pool, 'base_schema');
     return false;
   }
   
@@ -158,7 +189,14 @@ async function applyBaseSchema(pool) {
     
     for (const statement of statements) {
       if (statement.trim()) {
-        await pool.query(statement);
+        try {
+          await pool.query(statement);
+        } catch (error) {
+          // Ignore "already exists" errors
+          if (error.code !== '42P07' && error.code !== '42710') {
+            throw error;
+          }
+        }
       }
     }
     
@@ -185,7 +223,7 @@ async function applyMigrations(pool) {
       continue;
     }
     
-    await runSqlFile(pool, migration.file, migration.name, true);
+    await runSqlFile(pool, migration.file, migration.name);
     await recordMigration(pool, migration.name);
     appliedCount++;
   }
@@ -208,6 +246,13 @@ async function applySeedData(pool) {
   let skippedCount = 0;
   
   for (const seed of SEED_FILES) {
+    const exists = await tableExists(pool, seed.table);
+    if (!exists) {
+      console.log(`   ⏭️  ${seed.name} (table ${seed.table} doesn't exist yet)`);
+      skippedCount++;
+      continue;
+    }
+    
     const hasRows = await tableHasRows(pool, seed.table);
     
     if (hasRows) {
@@ -267,7 +312,8 @@ async function initializeDatabase() {
     
   } catch (error) {
     console.error('💥 Fatal error during database initialization:', error);
-    throw error;
+    console.error('⚠️  Server will continue but database may be incomplete');
+    console.log('');
   } finally {
     await pool.end();
   }
