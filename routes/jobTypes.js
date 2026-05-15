@@ -4,19 +4,48 @@ const { query } = require('../db/connection');
 const router = express.Router();
 
 // GET /api/job-types - List all job types
+// Query params:
+//   - category: filter by job type category
+//   - professionIds: comma-separated list of profession IDs to filter by
 router.get('/', async (req, res) => {
   try {
-    const { category } = req.query;
+    const { category, professionIds } = req.query;
 
-    let sql = 'SELECT * FROM job_types';
+    let sql = 'SELECT DISTINCT jt.* FROM job_types jt';
     const params = [];
+    const whereClauses = [];
 
-    if (category) {
-      sql += ' WHERE category = ?';
-      params.push(category);
+    // If professionIds provided, join with profession_job_types
+    if (professionIds) {
+      const ids = professionIds.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id));
+      
+      if (ids.length > 0) {
+        sql = `
+          SELECT DISTINCT jt.*
+          FROM job_types jt
+          INNER JOIN profession_job_types pjt ON jt.id = pjt.job_type_id
+          WHERE pjt.profession_id IN (${ids.map(() => '?').join(',')})
+        `;
+        params.push(...ids);
+
+        if (category) {
+          sql += ' AND jt.category = ?';
+          params.push(category);
+        }
+      }
+    } else {
+      // No profession filter, just get all job types
+      if (category) {
+        whereClauses.push('category = ?');
+        params.push(category);
+      }
+
+      if (whereClauses.length > 0) {
+        sql += ' WHERE ' + whereClauses.join(' AND ');
+      }
     }
 
-    sql += ' ORDER BY name';
+    sql += ' ORDER BY jt.name';
 
     const jobTypes = await query(sql, params);
 
