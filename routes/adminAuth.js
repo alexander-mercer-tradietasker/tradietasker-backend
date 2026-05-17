@@ -7,7 +7,7 @@ const router = express.Router();
 
 // Hardcoded admin credentials (hash generated from 'admin123')
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin';
-const ADMIN_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH || '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy';
+const ADMIN_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH || '$2b$10$6JjjzIaPBbgsga3N5aLFAuAUC0lglfLkb7ZKcaYuNuWkpy5dMnA9i';
 
 // POST /api/admin-auth/login - Admin login
 router.post('/login',
