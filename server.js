@@ -21,6 +21,7 @@ const profileUnlockRoutes = require('./routes/profileUnlocks');
 const webhookRoutes = require('./routes/webhooks');
 const adminRoutes = require('./routes/admin');
 const adminAuthRoutes = require('./routes/adminAuth');
+const adminStatsRoutes = require('./routes/adminStats');
 const versionRoutes = require('./routes/version');
 // const promoCodeRoutes = require('./routes/promoCodes');
 
@@ -59,6 +60,7 @@ app.use('/api/profile-unlocks', profileUnlockRoutes);
 app.use('/api/webhooks', webhookRoutes);
 app.use('/api/version', versionRoutes);
 app.use('/api/admin-auth', adminAuthRoutes);
+app.use('/api/admin', adminStatsRoutes);
 app.use('/api/admin', adminRoutes);
 // app.use('/api/promo-codes', promoCodeRoutes);
 
