@@ -1,13 +1,12 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
 const { query, get, run } = require('../db/connection');
-const { authenticateToken, requireGodTier } = require('../middleware/auth');
+const { authenticateAdmin } = require('../middleware/adminAuth');
 
 const router = express.Router();
 
-// All admin routes require god tier
-router.use(authenticateToken);
-router.use(requireGodTier);
+// All admin routes require admin authentication
+router.use(authenticateAdmin);
 
 // GET /api/admin/stats - Platform stats
 router.get('/stats', async (req, res) => {
