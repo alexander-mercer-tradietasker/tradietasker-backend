@@ -140,8 +140,9 @@ router.post('/create-poster-package-checkout', authenticateToken, async (req, re
     
     // Poster package pricing (AUD)
     const packages = {
-      '3-pack': { unlocks: 3, price: 1500 },    // $15.00
-      '20-pack': { unlocks: 20, price: 6000 }   // $60.00
+      '3-pack': { unlocks: 3, price: 1500 },     // $15.00
+      '12-pack': { unlocks: 12, price: 4000 },   // $40.00
+      '20-pack': { unlocks: 20, price: 6000 }    // $60.00
     };
 
     if (!packages[packageName]) {

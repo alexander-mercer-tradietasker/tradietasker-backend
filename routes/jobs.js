@@ -128,7 +128,22 @@ router.get('/', optionalAuth, async (req, res) => {
 // POST /api/jobs - Post a job (create account if poster doesn't have one)
 router.post('/',
   [
-    body('title').notEmpty().trim(),
+    body('title').notEmpty().trim()
+      .custom(value => {
+        // Block phone numbers (10+ digits)
+        if (/\b\d{10,}\b/.test(value)) {
+          throw new Error('Phone numbers are not allowed in job titles');
+        }
+        // Block email addresses
+        if (/@/.test(value) || /\bemail\b/i.test(value)) {
+          throw new Error('Email addresses are not allowed in job titles');
+        }
+        // Block contact keywords
+        if (/\b(phone|contact|call|text|mobile)\b/i.test(value)) {
+          throw new Error('Contact information is not allowed in job titles');
+        }
+        return true;
+      }),
     body('short_description').notEmpty().trim(),
     body('full_description').notEmpty().trim(),
     body('budget').optional().isFloat({ min: 0 }),
