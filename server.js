@@ -24,6 +24,9 @@ const adminAuthRoutes = require('./routes/adminAuth');
 const adminStatsRoutes = require('./routes/adminStats');
 const versionRoutes = require('./routes/version');
 const seedRoutes = require('./routes/seed');
+const tradieDashboardRoutes = require('./routes/tradie-dashboard');
+const customerDashboardRoutes = require('./routes/customer-dashboard');
+const messagesRoutes = require('./routes/messages');
 // const promoCodeRoutes = require('./routes/promoCodes');
 
 const app = express();
@@ -63,6 +66,9 @@ app.use('/api/version', versionRoutes);
 app.use('/api/admin-auth', adminAuthRoutes);
 app.use('/api/admin', adminStatsRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/tradie-dashboard', tradieDashboardRoutes);
+app.use('/api/customer-dashboard', customerDashboardRoutes);
+app.use('/api/messages', messagesRoutes);
 // app.use('/api/promo-codes', promoCodeRoutes);
 app.use('/api/seed', seedRoutes);
 
