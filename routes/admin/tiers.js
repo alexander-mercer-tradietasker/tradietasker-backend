@@ -1,0 +1,164 @@
+const express = require('express');
+const { body, validationResult } = require('express-validator');
+const { query, get, run } = require('../../db/connection');
+const { authenticateToken, requireAdmin } = require('../../middleware/auth');
+const { calculateDiscountedPrice } = require('../../utils/discount-calculator');
+
+const router = express.Router();
+
+// All routes require admin authentication
+router.use(authenticateToken);
+router.use(requireAdmin);
+
+// GET /api/admin/tiers - List all tier configurations
+router.get('/', async (req, res) => {
+  try {
+    const tiers = await query('SELECT * FROM tiers ORDER BY id');
+    
+    // Get site-wide discount settings
+    const siteSettings = await query(`
+      SELECT setting_key, setting_value 
+      FROM site_settings 
+      WHERE setting_key IN ('site_wide_discount_percent', 'site_wide_discount_dollar')
+    `);
+    
+    const siteWideDiscount = {
+      percent: parseFloat(siteSettings.find(s => s.setting_key === 'site_wide_discount_percent')?.setting_value || 0),
+      dollar: parseFloat(siteSettings.find(s => s.setting_key === 'site_wide_discount_dollar')?.setting_value || 0)
+    };
+    
+    res.json({ tiers, siteWideDiscount });
+  } catch (error) {
+    console.error('Get tiers error:', error);
+    res.status(500).json({ error: 'Failed to get tier configurations' });
+  }
+});
+
+// GET /api/admin/tiers/:tier - Get single tier configuration
+router.get('/:tier', async (req, res) => {
+  try {
+    const { tier } = req.params;
+    
+    const tierConfig = await get('SELECT * FROM tiers WHERE tier_name = ?', [tier]);
+    
+    if (!tierConfig) {
+      return res.status(404).json({ error: 'Tier not found' });
+    }
+    
+    res.json(tierConfig);
+  } catch (error) {
+    console.error('Get tier error:', error);
+    res.status(500).json({ error: 'Failed to get tier configuration' });
+  }
+});
+
+// PUT /api/admin/tiers/:tier - Update tier configuration
+router.put('/:tier',
+  [
+    body('subscription_cost_excl_tax').optional().isFloat({ min: 0 }),
+    body('tier_discount_percent').optional().isFloat({ min: 0, max: 100 }),
+    body('tier_discount_dollar').optional().isFloat({ min: 0 }),
+    body('tier_discount_enabled').optional().isBoolean(),
+    body('tier_discount_expiry').optional().isISO8601(),
+    body('base_credits').optional().isInt({ min: 0 }),
+    body('base_credits_multiplier').optional().isInt({ min: 1 }),
+    body('bonus_credits').optional().isInt({ min: 0 }),
+    body('bonus_credits_multiplier').optional().isInt({ min: 1 }),
+    body('additional_bonus_credits').optional().isInt({ min: 0 }),
+    body('additional_bonus_credits_multiplier').optional().isInt({ min: 1 }),
+    body('initial_purchase_bonus_credits').optional().isInt({ min: 0 }),
+    body('recurring_bonus_credits').optional().isInt({ min: 0 }),
+    body('job_view_delay_minutes').optional().isInt({ min: 0, max: 1440 })
+  ],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+      }
+
+      const { tier } = req.params;
+      const updates = req.body;
+
+      // Check tier exists
+      const existing = await get('SELECT id FROM tiers WHERE tier_name = ?', [tier]);
+      if (!existing) {
+        return res.status(404).json({ error: 'Tier not found' });
+      }
+
+      // Build update query
+      const fields = Object.keys(updates);
+      if (fields.length === 0) {
+        return res.status(400).json({ error: 'No fields to update' });
+      }
+
+      const setClause = fields.map(f => `${f} = ?`).join(', ');
+      const values = fields.map(f => updates[f]);
+      values.push(tier);
+
+      await run(
+        `UPDATE tiers SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE tier_name = ?`,
+        values
+      );
+
+      // Return updated tier config
+      const updated = await get('SELECT * FROM tiers WHERE tier_name = ?', [tier]);
+      res.json(updated);
+    } catch (error) {
+      console.error('Update tier error:', error);
+      res.status(500).json({ error: 'Failed to update tier configuration' });
+    }
+  }
+);
+
+// GET /api/admin/tiers/preview-price/:tier - Calculate price with discounts
+router.get('/preview-price/:tier', async (req, res) => {
+  try {
+    const { tier } = req.params;
+    
+    const tierConfig = await get('SELECT * FROM tiers WHERE tier_name = ?', [tier]);
+    if (!tierConfig) {
+      return res.status(404).json({ error: 'Tier not found' });
+    }
+    
+    // Get site-wide discount
+    const siteSettings = await query(`
+      SELECT setting_key, setting_value 
+      FROM site_settings 
+      WHERE setting_key IN ('site_wide_discount_percent', 'site_wide_discount_dollar')
+    `);
+    
+    const siteWideDiscount = {
+      percent: parseFloat(siteSettings.find(s => s.setting_key === 'site_wide_discount_percent')?.setting_value || 0),
+      dollar: parseFloat(siteSettings.find(s => s.setting_key === 'site_wide_discount_dollar')?.setting_value || 0)
+    };
+    
+    const tierDiscount = {
+      percent: parseFloat(tierConfig.tier_discount_percent || 0),
+      dollar: parseFloat(tierConfig.tier_discount_dollar || 0),
+      enabled: tierConfig.tier_discount_enabled,
+      expiry: tierConfig.tier_discount_expiry
+    };
+    
+    const originalPrice = parseFloat(tierConfig.subscription_cost_excl_tax);
+    const discountedPrice = calculateDiscountedPrice(originalPrice, tierDiscount, siteWideDiscount);
+    
+    // Calculate total credits
+    const totalCredits = 
+      (tierConfig.base_credits * tierConfig.base_credits_multiplier) +
+      (tierConfig.bonus_credits * tierConfig.bonus_credits_multiplier) +
+      (tierConfig.additional_bonus_credits * tierConfig.additional_bonus_credits_multiplier);
+    
+    res.json({
+      originalPrice,
+      discountedPrice,
+      totalSavings: originalPrice - discountedPrice,
+      totalCredits
+    });
+  } catch (error) {
+    console.error('Preview price error:', error);
+    res.status(500).json({ error: 'Failed to calculate price preview' });
+  }
+});
+
+module.exports = router;
