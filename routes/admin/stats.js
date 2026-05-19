@@ -51,17 +51,27 @@ router.get('/overview', async (req, res) => {
     // Credit stats
     const totalCredits = await get(`SELECT SUM(credits) as total FROM users`);
 
-    // Referral stats
-    const referralStats = await query(`
-      SELECT 
-        COUNT(*) as total_referrals,
-        SUM(credits_granted) as total_credits_granted
-      FROM referral_credits
-      WHERE granted_at ${dateFilter}
-    `);
+    // Referral stats - skip if table doesn't exist
+    let referralStats = [{ total_referrals: 0, total_credits_granted: 0 }];
+    try {
+      referralStats = await query(`
+        SELECT 
+          COUNT(*) as total_referrals,
+          SUM(credits_granted) as total_credits_granted
+        FROM referral_credits
+        WHERE granted_at ${dateFilter}
+      `);
+    } catch (e) {
+      // Table doesn't exist yet
+    }
 
-    // Flag stats
-    const flagStats = await query(`SELECT status, COUNT(*) as count FROM user_flags GROUP BY status`);
+    // Flag stats - skip if table doesn't exist
+    let flagStats = [];
+    try {
+      flagStats = await query(`SELECT status, COUNT(*) as count FROM user_flags GROUP BY status`);
+    } catch (e) {
+      // Table doesn't exist yet
+    }
 
     res.json({
       users: {
