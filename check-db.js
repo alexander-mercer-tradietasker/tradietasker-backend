@@ -1,60 +1,39 @@
-#!/usr/bin/env node
-const fs = require('fs');
-const path = require('path');
+const { Pool } = require('pg');
 
-const usePostgres = !!process.env.DATABASE_URL;
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.DATABASE_URL.includes('render.com') ? { rejectUnauthorized: false } : false
+});
 
-console.log('='.repeat(80));
-console.log('Database Check');
-console.log('='.repeat(80));
-console.log(`Database type: ${usePostgres ? 'PostgreSQL' : 'SQLite'}`);
-console.log(`DATABASE_URL set: ${!!process.env.DATABASE_URL}`);
-
-if (usePostgres) {
-  console.log('\nUsing PostgreSQL - will initialize on first query if needed');
-  console.log('Running PostgreSQL initialization...');
+async function checkDatabase() {
+  const client = await pool.connect();
   
-  const { initializeDatabase } = require('./init-postgres');
-  
-  initializeDatabase()
-    .then(() => {
-      console.log('✓ PostgreSQL ready\n');
-      console.log('='.repeat(80) + '\n');
-    })
-    .catch(error => {
-      console.error('✗ PostgreSQL initialization failed:', error.message);
-      console.error('Server will start but database may not be ready');
-      console.log('='.repeat(80) + '\n');
-    });
-} else {
-  const { execSync } = require('child_process');
-  const DB_PATH = process.env.DATABASE_PATH || path.join(__dirname, 'db', 'tradietasker.db');
-  const dbDir = path.dirname(DB_PATH);
-  
-  console.log(`Database path: ${DB_PATH}`);
-  console.log(`Database exists: ${fs.existsSync(DB_PATH)}`);
-  
-  if (!fs.existsSync(DB_PATH)) {
-    console.log('\n⚠️  Database not found. Initializing...');
+  try {
+    console.log('\n=== Checking Database Tables ===\n');
     
-    if (!fs.existsSync(dbDir)) {
-      fs.mkdirSync(dbDir, { recursive: true });
-      console.log('✓ Created database directory');
+    // Check if tables exist
+    const tables = ['tiers', 'tax_rates', 'site_settings', 'promo_codes', 'users'];
+    for (const table of tables) {
+      const result = await client.query(
+        `SELECT COUNT(*) FROM ${table}`
+      );
+      console.log(`${table}: ${result.rows[0].count} records`);
     }
     
-    try {
-      execSync('node init-db.js', { stdio: 'inherit' });
-      console.log('✓ Database initialized');
-      
-      execSync('node seed-expanded-test-data.js', { stdio: 'inherit' });
-      console.log('✓ Test data seeded');
-    } catch (error) {
-      console.error('✗ Initialization failed:', error.message);
-      process.exit(1);
-    }
-  } else {
-    console.log('✓ SQLite database exists');
+    // Get tiers
+    console.log('\n=== Tiers Data ===');
+    const tiers = await client.query('SELECT tier_name, subscription_cost_excl_tax, job_view_delay_minutes FROM tiers ORDER BY subscription_cost_excl_tax');
+    console.log(tiers.rows);
+    
+    // Get tax rates
+    console.log('\n=== Tax Rates Data ===');
+    const taxes = await client.query('SELECT * FROM tax_rates');
+    console.log(taxes.rows);
+    
+  } finally {
+    client.release();
+    await pool.end();
   }
-  
-  console.log('='.repeat(80) + '\n');
 }
+
+checkDatabase().catch(console.error);

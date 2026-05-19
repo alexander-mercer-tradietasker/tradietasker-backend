@@ -45,22 +45,26 @@ function getDb() {
   return initDb();
 }
 
+// Helper to convert SQLite placeholders to PostgreSQL
+function convertToPostgres(sql) {
+  let paramIndex = 1;
+  return sql.replace(/\?/g, () => `$${paramIndex++}`);
+}
+
 // Promisified query methods that work with both PostgreSQL and SQLite
 async function query(sql, params = []) {
   initDb(); // Ensure pool is initialized
   if (usePostgres) {
     // Convert SQLite-style placeholders (?, ?) to PostgreSQL ($1, $2)
-    let pgSql = sql;
-    let paramIndex = 1;
-    while (pgSql.includes('?')) {
-      pgSql = pgSql.replace('?', `$${paramIndex}`);
-      paramIndex++;
-    }
+    const pgSql = convertToPostgres(sql);
     
     const client = await pool.connect();
     try {
       const result = await client.query(pgSql, params);
       return result.rows;
+    } catch (err) {
+      console.error('PostgreSQL query error:', pgSql, params, err);
+      throw err;
     } finally {
       client.release();
     }
@@ -81,18 +85,15 @@ async function query(sql, params = []) {
 async function get(sql, params = []) {
   initDb(); // Ensure pool is initialized
   if (usePostgres) {
-    // Convert SQLite-style placeholders
-    let pgSql = sql;
-    let paramIndex = 1;
-    while (pgSql.includes('?')) {
-      pgSql = pgSql.replace('?', `$${paramIndex}`);
-      paramIndex++;
-    }
+    const pgSql = convertToPostgres(sql);
     
     const client = await pool.connect();
     try {
       const result = await client.query(pgSql, params);
       return result.rows[0] || null;
+    } catch (err) {
+      console.error('PostgreSQL get error:', pgSql, params, err);
+      throw err;
     } finally {
       client.release();
     }
@@ -113,13 +114,7 @@ async function get(sql, params = []) {
 async function run(sql, params = []) {
   initDb(); // Ensure pool is initialized
   if (usePostgres) {
-    // Convert SQLite-style placeholders
-    let pgSql = sql;
-    let paramIndex = 1;
-    while (pgSql.includes('?')) {
-      pgSql = pgSql.replace('?', `$${paramIndex}`);
-      paramIndex++;
-    }
+    const pgSql = convertToPostgres(sql);
     
     const client = await pool.connect();
     try {
@@ -131,6 +126,9 @@ async function run(sql, params = []) {
       }
       
       return { lastID: null, changes: result.rowCount };
+    } catch (err) {
+      console.error('PostgreSQL run error:', pgSql, params, err);
+      throw err;
     } finally {
       client.release();
     }
