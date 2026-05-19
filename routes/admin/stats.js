@@ -1,11 +1,10 @@
 const express = require('express');
 const { query, get } = require('../../db/connection');
-const { authenticateToken, requireAdmin } = require('../../middleware/auth');
+const { authenticateAdmin } = require('../../middleware/adminAuth');
 
 const router = express.Router();
 
-router.use(authenticateToken);
-router.use(requireAdmin);
+router.use(authenticateAdmin);
 
 // Helper to get date filter
 function getDateFilter(period) {
