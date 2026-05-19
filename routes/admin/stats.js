@@ -1,160 +1,74 @@
 const express = require('express');
-const { query, get } = require('../../db/connection');
+const { Pool } = require('pg');
 const { authenticateAdmin } = require('../../middleware/adminAuth');
 
 const router = express.Router();
-
 router.use(authenticateAdmin);
 
-// Helper to get date filter
-function getDateFilter(period) {
-  const now = new Date();
-  let dateFilter = '';
-
-  switch (period) {
-    case 'today':
-      const startOfDay = new Date(now.setHours(0, 0, 0, 0));
-      dateFilter = `>= '${startOfDay.toISOString()}'`;
-      break;
-    case 'week':
-      const weekAgo = new Date(now.setDate(now.getDate() - 7));
-      dateFilter = `>= '${weekAgo.toISOString()}'`;
-      break;
-    case 'month':
-      const monthAgo = new Date(now.setMonth(now.getMonth() - 1));
-      dateFilter = `>= '${monthAgo.toISOString()}'`;
-      break;
-    case 'all':
-    default:
-      dateFilter = '> \'1970-01-01\'';
-  }
-
-  return dateFilter;
-}
+// Direct PostgreSQL pool for admin routes
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL
+});
 
 // GET /api/admin/stats/overview - All platform stats
 router.get('/overview', async (req, res) => {
   try {
-    const { period = 'all' } = req.query;
-    const dateFilter = getDateFilter(period);
-
-    // User stats
-    const totalUsers = await get(`SELECT COUNT(*) as count FROM users WHERE created_at ${dateFilter}`);
-    const usersByRole = await query(`SELECT role, COUNT(*) as count FROM users WHERE created_at ${dateFilter} GROUP BY role`);
-    const usersByTier = await query(`SELECT tier, COUNT(*) as count FROM users WHERE created_at ${dateFilter} GROUP BY tier`);
-    const usersByStatus = await query(`SELECT status, COUNT(*) as count FROM users GROUP BY status`);
-
-    // Job stats
-    const totalJobs = await get(`SELECT COUNT(*) as count FROM jobs WHERE created_at ${dateFilter}`);
-    const jobsByStatus = await query(`SELECT status, COUNT(*) as count FROM jobs WHERE created_at ${dateFilter} GROUP BY status`);
-
-    // Credit stats
-    const totalCredits = await get(`SELECT SUM(credits) as total FROM users`);
-
-    // Referral stats - skip if table doesn't exist
-    let referralStats = [{ total_referrals: 0, total_credits_granted: 0 }];
-    try {
-      referralStats = await query(`
-        SELECT 
-          COUNT(*) as total_referrals,
-          SUM(credits_granted) as total_credits_granted
-        FROM referral_credits
-        WHERE granted_at ${dateFilter}
-      `);
-    } catch (e) {
-      // Table doesn't exist yet
-    }
-
-    // Flag stats - skip if table doesn't exist
-    let flagStats = [];
-    try {
-      flagStats = await query(`SELECT status, COUNT(*) as count FROM user_flags GROUP BY status`);
-    } catch (e) {
-      // Table doesn't exist yet
-    }
+    // Simple direct queries that will work
+    const usersResult = await pool.query('SELECT COUNT(*) as count FROM users');
+    const jobsResult = await pool.query('SELECT COUNT(*) as count FROM jobs');
+    const professionsResult = await pool.query('SELECT COUNT(*) as count FROM professions');
+    
+    const usersByRoleResult = await pool.query('SELECT role, COUNT(*) as count FROM users GROUP BY role');
+    const jobsByStatusResult = await pool.query('SELECT status, COUNT(*) as count FROM jobs GROUP BY status');
 
     res.json({
       users: {
-        total: totalUsers.count,
-        byRole: usersByRole,
-        byTier: usersByTier,
-        byStatus: usersByStatus
+        total: parseInt(usersResult.rows[0].count),
+        byRole: usersByRoleResult.rows
       },
       jobs: {
-        total: totalJobs.count,
-        byStatus: jobsByStatus
+        total: parseInt(jobsResult.rows[0].count),
+        byStatus: jobsByStatusResult.rows
       },
-      credits: {
-        totalInSystem: totalCredits.total || 0
-      },
-      referrals: {
-        total: referralStats[0]?.total_referrals || 0,
-        creditsGranted: referralStats[0]?.total_credits_granted || 0
-      },
-      flags: flagStats,
-      period
+      professions: {
+        total: parseInt(professionsResult.rows[0].count)
+      }
     });
   } catch (error) {
     console.error('Get overview stats error:', error);
-    res.status(500).json({ error: 'Failed to get stats' });
-  }
-});
-
-// GET /api/admin/stats/revenue - Revenue breakdown
-router.get('/revenue', async (req, res) => {
-  try {
-    // Placeholder - need transaction tracking
-    res.json({
-      total: 0,
-      byTier: [],
-      byPackage: [],
-      note: 'Revenue tracking not yet implemented'
-    });
-  } catch (error) {
-    console.error('Get revenue stats error:', error);
-    res.status(500).json({ error: 'Failed to get revenue stats' });
+    res.status(500).json({ error: 'Failed to get stats', details: error.message });
   }
 });
 
 // GET /api/admin/stats/users - User metrics
 router.get('/users', async (req, res) => {
   try {
-    const { period = 'all' } = req.query;
-    const dateFilter = getDateFilter(period);
-
-    const newSignups = await get(`SELECT COUNT(*) as count FROM users WHERE created_at ${dateFilter}`);
-    const byRole = await query(`SELECT role, COUNT(*) as count FROM users WHERE created_at ${dateFilter} GROUP BY role`);
-    const byTier = await query(`SELECT tier, COUNT(*) as count FROM users WHERE created_at ${dateFilter} GROUP BY tier`);
+    const result = await pool.query('SELECT COUNT(*) as count FROM users');
+    const byRole = await pool.query('SELECT role, COUNT(*) as count FROM users GROUP BY role');
 
     res.json({
-      newSignups: newSignups.count,
-      byRole,
-      byTier,
-      period
+      total: parseInt(result.rows[0].count),
+      byRole: byRole.rows
     });
   } catch (error) {
     console.error('Get user stats error:', error);
-    res.status(500).json({ error: 'Failed to get user stats' });
+    res.status(500).json({ error: 'Failed to get user stats', details: error.message });
   }
 });
 
-// GET /api/admin/stats/jobs - Job metrics
+// GET /api/admin/stats/jobs - Job metrics  
 router.get('/jobs', async (req, res) => {
   try {
-    const { period = 'all' } = req.query;
-    const dateFilter = getDateFilter(period);
-
-    const total = await get(`SELECT COUNT(*) as count FROM jobs WHERE created_at ${dateFilter}`);
-    const byStatus = await query(`SELECT status, COUNT(*) as count FROM jobs WHERE created_at ${dateFilter} GROUP BY status`);
+    const result = await pool.query('SELECT COUNT(*) as count FROM jobs');
+    const byStatus = await pool.query('SELECT status, COUNT(*) as count FROM jobs GROUP BY status');
 
     res.json({
-      total: total.count,
-      byStatus,
-      period
+      total: parseInt(result.rows[0].count),
+      byStatus: byStatus.rows
     });
   } catch (error) {
     console.error('Get job stats error:', error);
-    res.status(500).json({ error: 'Failed to get job stats' });
+    res.status(500).json({ error: 'Failed to get job stats', details: error.message });
   }
 });
 
