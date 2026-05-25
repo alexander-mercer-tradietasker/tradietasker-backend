@@ -1,10 +1,11 @@
 const express = require('express');
 const { query } = require('../../db/connection');
-const { requireAdmin } = require('../../middleware/auth');
+const { authenticateToken, requireAdmin } = require('../../middleware/auth');
 
 const router = express.Router();
 
 // All routes require admin authentication
+router.use(authenticateToken);
 router.use(requireAdmin);
 
 // GET /api/admin/transactions - List all contact transactions

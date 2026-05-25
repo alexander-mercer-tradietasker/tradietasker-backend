@@ -1,118 +1,130 @@
 const express = require('express');
 const { query, get } = require('../../db/connection');
-const { requireAdmin } = require('../../middleware/auth');
+const { authenticateToken, requireAdmin } = require('../../middleware/auth');
 
 const router = express.Router();
 
+router.use(authenticateToken);
 router.use(requireAdmin);
 
 // GET /api/admin/jobs - List all jobs with filters
 router.get('/', async (req, res) => {
   try {
-    const {
-      status,
-      god_tier_only,
+    const { 
+      status, 
+      tasker_id, 
+      customer_id, 
+      min_price, 
+      max_price,
+      profession,
+      job_type,
+      location,
       limit = 50,
-      offset = 0
+      offset = 0,
+      sort = 'created_at',
+      order = 'DESC'
     } = req.query;
 
-    let sql = `
-      SELECT 
-        j.*,
-        u.name as poster_name,
-        u.email as poster_email,
-        jt.name as job_type_name
-      FROM jobs j
-      LEFT JOIN users u ON j.poster_id = u.id
-      LEFT JOIN job_types jt ON j.job_type_id = jt.id
-      WHERE 1=1
-    `;
+    let sql = 'SELECT * FROM jobs WHERE 1=1';
     const params = [];
+    let paramIndex = 1;
 
     if (status) {
-      sql += ' AND j.status = ?';
+      sql += ` AND status = $${paramIndex++}`;
       params.push(status);
     }
 
-    if (god_tier_only === 'true') {
-      sql += ' AND j.god_tier_only = true';
-    } else if (god_tier_only === 'false') {
-      sql += ' AND j.god_tier_only = false';
+    if (tasker_id) {
+      sql += ` AND tasker_id = $${paramIndex++}`;
+      params.push(parseInt(tasker_id));
     }
 
-    sql += ' ORDER BY j.created_at DESC LIMIT ? OFFSET ?';
+    if (customer_id) {
+      sql += ` AND customer_id = $${paramIndex++}`;
+      params.push(parseInt(customer_id));
+    }
+
+    if (min_price) {
+      sql += ` AND price >= $${paramIndex++}`;
+      params.push(parseFloat(min_price));
+    }
+
+    if (max_price) {
+      sql += ` AND price <= $${paramIndex++}`;
+      params.push(parseFloat(max_price));
+    }
+
+    if (profession) {
+      sql += ` AND profession ILIKE $${paramIndex++}`;
+      params.push(`%${profession}%`);
+    }
+
+    if (job_type) {
+      sql += ` AND job_type ILIKE $${paramIndex++}`;
+      params.push(`%${job_type}%`);
+    }
+
+    if (location) {
+      sql += ` AND location ILIKE $${paramIndex++}`;
+      params.push(`%${location}%`);
+    }
+
+    // Add sorting
+    const validSorts = ['created_at', 'updated_at', 'price', 'status'];
+    const sortField = validSorts.includes(sort) ? sort : 'created_at';
+    const sortOrder = order.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+    sql += ` ORDER BY ${sortField} ${sortOrder}`;
+
+    // Add pagination
+    sql += ` LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
     params.push(parseInt(limit), parseInt(offset));
 
     const jobs = await query(sql, params);
-    res.json(jobs);
+
+    // Get total count
+    let countSql = 'SELECT COUNT(*) as total FROM jobs WHERE 1=1';
+    const countParams = params.slice(0, -2); // Remove limit and offset
+    
+    if (status) countSql += ` AND status = $1`;
+    if (tasker_id) countSql += ` AND tasker_id = $${countParams.length}`;
+    if (customer_id) countSql += ` AND customer_id = $${countParams.length}`;
+    if (min_price) countSql += ` AND price >= $${countParams.length}`;
+    if (max_price) countSql += ` AND price <= $${countParams.length}`;
+    if (profession) countSql += ` AND profession ILIKE $${countParams.length}`;
+    if (job_type) countSql += ` AND job_type ILIKE $${countParams.length}`;
+    if (location) countSql += ` AND location ILIKE $${countParams.length}`;
+
+    const countResult = await query(countSql, countParams);
+    const total = parseInt(countResult[0].total);
+
+    res.json({
+      jobs,
+      pagination: {
+        total,
+        limit: parseInt(limit),
+        offset: parseInt(offset),
+        hasMore: offset + jobs.length < total
+      }
+    });
   } catch (error) {
-    console.error('List jobs error:', error);
-    res.status(500).json({ error: 'Failed to list jobs' });
+    console.error('Admin jobs list error:', error);
+    res.status(500).json({ error: 'Failed to fetch jobs' });
   }
 });
 
-// GET /api/admin/jobs/flagged - List flagged jobs
-router.get('/flagged', async (req, res) => {
-  try {
-    const flaggedJobs = await query(`
-      SELECT 
-        j.*,
-        uf.reason as flag_reason,
-        uf.details as flag_details,
-        uf.created_at as flagged_at,
-        reporter.name as reporter_name,
-        reporter.email as reporter_email
-      FROM user_flags uf
-      JOIN jobs j ON uf.reported_job_id = j.id
-      JOIN users reporter ON uf.reported_by_user_id = reporter.id
-      WHERE uf.flag_type = 'job' AND uf.status = 'pending'
-      ORDER BY uf.created_at DESC
-    `);
-
-    res.json(flaggedJobs);
-  } catch (error) {
-    console.error('List flagged jobs error:', error);
-    res.status(500).json({ error: 'Failed to list flagged jobs' });
-  }
-});
-
-// GET /api/admin/jobs/:id - Get job details with all flags
+// GET /api/admin/jobs/:id - Get single job details
 router.get('/:id', async (req, res) => {
   try {
-    const { id } = req.params;
-
-    const job = await get(`
-      SELECT 
-        j.*,
-        u.name as poster_name,
-        u.email as poster_email,
-        u.phone as poster_phone,
-        jt.name as job_type_name
-      FROM jobs j
-      LEFT JOIN users u ON j.poster_id = u.id
-      LEFT JOIN job_types jt ON j.job_type_id = jt.id
-      WHERE j.id = ?
-    `, [id]);
-
+    const job = await get('SELECT * FROM jobs WHERE id = $1', [req.params.id]);
+    
     if (!job) {
       return res.status(404).json({ error: 'Job not found' });
     }
 
-    const flags = await query(`
-      SELECT 
-        uf.*,
-        reporter.name as reporter_name,
-        reporter.email as reporter_email
-      FROM user_flags uf
-      JOIN users reporter ON uf.reported_by_user_id = reporter.id
-      WHERE uf.flag_type = 'job' AND uf.reported_job_id = ?
-      ORDER BY uf.created_at DESC
-    `, [id]);
-
-    res.json({ job, flags });
+    res.json({ job });
   } catch (error) {
-    console.error('Get job error:', error);
-    res.status(500).json({ error: 'Failed to get job' });
+    console.error('Admin job detail error:', error);
+    res.status(500).json({ error: 'Failed to fetch job' });
   }
 });
 

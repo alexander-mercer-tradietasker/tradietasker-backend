@@ -1,11 +1,12 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
 const { query, get, run } = require('../../db/connection');
-const { requireAdmin } = require('../../middleware/auth');
+const { authenticateToken, requireAdmin } = require('../../middleware/auth');
 
 const router = express.Router();
 
 // All routes require admin authentication
+router.use(authenticateToken);
 router.use(requireAdmin);
 
 // GET /api/admin/settings - Get all settings as key-value object
