@@ -1,11 +1,11 @@
 const express = require('express');
 const { query, run } = require('../../db/connection');
-const { authenticateAdmin } = require('../../middleware/auth');
+const { requireAdmin } = require('../../middleware/auth');
 
 const router = express.Router();
 
 // All routes require admin authentication
-router.use(authenticateAdmin);
+router.use(requireAdmin);
 
 // GET /api/admin/subscriptions - List all subscriptions
 router.get('/', async (req, res) => {

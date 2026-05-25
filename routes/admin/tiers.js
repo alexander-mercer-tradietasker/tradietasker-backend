@@ -1,13 +1,13 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
 const { query, get, run } = require('../../db/connection');
-const { authenticateAdmin } = require('../../middleware/adminAuth');
+const { requireAdmin } = require('../../middleware/adminAuth');
 const { calculateDiscountedPrice } = require('../../utils/discount-calculator');
 
 const router = express.Router();
 
 // All routes require admin authentication
-router.use(authenticateAdmin);
+router.use(requireAdmin);
 
 // GET /api/admin/tiers - List all tier configurations
 router.get('/', async (req, res) => {

@@ -1,9 +1,9 @@
 const express = require('express');
 const { Pool } = require('pg');
-const { authenticateAdmin } = require('../../middleware/adminAuth');
+const { requireAdmin } = require('../../middleware/adminAuth');
 
 const router = express.Router();
-router.use(authenticateAdmin);
+router.use(requireAdmin);
 
 // Direct PostgreSQL pool for admin routes
 const pool = new Pool({

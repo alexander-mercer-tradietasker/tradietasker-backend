@@ -1,12 +1,12 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
 const { query, get, run } = require('../../db/connection');
-const { authenticateAdmin } = require('../../middleware/adminAuth');
+const { requireAdmin } = require('../../middleware/adminAuth');
 
 const router = express.Router();
 
 // All routes require admin authentication
-router.use(authenticateAdmin);
+router.use(requireAdmin);
 
 // Generate random promo code
 function generatePromoCode(length = 12) {

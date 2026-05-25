@@ -1,11 +1,11 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
 const { query, get, run } = require('../../db/connection');
-const { authenticateAdmin } = require('../../middleware/adminAuth');
+const { requireAdmin } = require('../../middleware/adminAuth');
 
 const router = express.Router();
 
-router.use(authenticateAdmin);
+router.use(requireAdmin);
 
 // GET /api/admin/users - List users with filters
 router.get('/', async (req, res) => {
