@@ -1,6 +1,6 @@
 const express = require('express');
 const { Pool } = require('pg');
-const { requireAdmin } = require('../../middleware/adminAuth');
+const { requireAdmin } = require('../../middleware/auth');
 
 const router = express.Router();
 router.use(requireAdmin);

@@ -1,6 +1,6 @@
 const express = require('express');
 const { query, get } = require('../../db/connection');
-const { requireAdmin } = require('../../middleware/adminAuth');
+const { requireAdmin } = require('../../middleware/auth');
 
 const router = express.Router();
 
