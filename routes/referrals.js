@@ -1,6 +1,6 @@
 const express = require('express');
 const { query, run } = require('../db/connection');
-const { authenticate } = require('../middleware/auth');
+const { authenticateToken } = require('../middleware/auth');
 const crypto = require('crypto');
 
 const router = express.Router();
@@ -11,7 +11,7 @@ function generateReferralCode() {
 }
 
 // GET /api/referrals/my-code - Get current user's referral code
-router.get('/my-code', authenticate, async (req, res) => {
+router.get('/my-code', authenticateToken, async (req, res) => {
   try {
     const user = await query(
       'SELECT referral_code, referral_credit_earned FROM users WHERE id = ?',
@@ -71,7 +71,7 @@ router.get('/my-code', authenticate, async (req, res) => {
 });
 
 // GET /api/referrals/my-referrals - Get list of users I referred
-router.get('/my-referrals', authenticate, async (req, res) => {
+router.get('/my-referrals', authenticateToken, async (req, res) => {
   try {
     const referrals = await query(`
       SELECT 
