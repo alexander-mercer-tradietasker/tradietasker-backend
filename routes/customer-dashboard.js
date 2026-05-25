@@ -328,4 +328,89 @@ router.post('/photo',
   }
 );
 
+// GET /api/customer-dashboard/overview - Get comprehensive dashboard data
+router.get('/overview', authenticateToken, async (req, res) => {
+  try {
+    // Get user details
+    const user = await get(
+      'SELECT id, name, email, phone, credits, residential_address FROM users WHERE id = ?',
+      [req.user.id]
+    );
+
+    // Get contacted tradies
+    const contactedTradies = await query(`
+      SELECT 
+        u.id,
+        u.name,
+        u.phone,
+        u.email,
+        ct.created_at as contacted_at,
+        ct.contact_type,
+        j.id as job_id,
+        j.title as job_title
+      FROM contact_transactions ct
+      LEFT JOIN users u ON ct.receiver_id = u.id
+      LEFT JOIN jobs j ON ct.job_id = j.id
+      WHERE ct.sender_id = ?
+      ORDER BY ct.created_at DESC
+      LIMIT 10
+    `, [req.user.id]);
+
+    // Get active jobs with applications
+    const activeJobs = await query(`
+      SELECT 
+        j.id,
+        j.title,
+        j.description,
+        j.budget,
+        j.status,
+        j.created_at,
+        COUNT(DISTINCT ja.id) as application_count,
+        assigned.name as assigned_tradie_name
+      FROM jobs j
+      LEFT JOIN job_applications ja ON j.id = ja.job_id
+      LEFT JOIN users assigned ON j.assigned_tradie_id = assigned.id
+      WHERE j.poster_id = ? AND j.status IN ('open', 'in-progress')
+      GROUP BY j.id, j.title, j.description, j.budget, j.status, j.created_at, assigned.name
+      ORDER BY j.created_at DESC
+    `, [req.user.id]);
+
+    // Get completed jobs and reviews
+    const completedJobs = await query(`
+      SELECT 
+        j.id,
+        j.title,
+        j.status,
+        j.completed_at,
+        assigned.name as assigned_tradie_name,
+        assigned.id as assigned_tradie_id,
+        r.id as review_id,
+        r.rating,
+        r.comment
+      FROM jobs j
+      LEFT JOIN users assigned ON j.assigned_tradie_id = assigned.id
+      LEFT JOIN reviews r ON j.id = r.job_id AND r.reviewer_id = ?
+      WHERE j.poster_id = ? AND j.status = 'complete'
+      ORDER BY j.completed_at DESC
+      LIMIT 10
+    `, [req.user.id, req.user.id]);
+
+    res.json({
+      user,
+      contactedTradies,
+      activeJobs,
+      completedJobs,
+      stats: {
+        totalJobs: activeJobs.length + completedJobs.length,
+        activeJobs: activeJobs.length,
+        completedJobs: completedJobs.length,
+        totalContacts: contactedTradies.length
+      }
+    });
+  } catch (error) {
+    console.error('Get customer dashboard overview error:', error);
+    res.status(500).json({ error: 'Failed to get dashboard overview' });
+  }
+});
+
 module.exports = router;
