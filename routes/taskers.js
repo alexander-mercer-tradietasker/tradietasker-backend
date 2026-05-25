@@ -21,6 +21,7 @@ router.get('/', optionalAuth, async (req, res) => {
         u.id,
         u.name,
         u.tier,
+        u.is_god_tier,
         u.service_postcode,
         u.service_radius_km,
         u.profile_photo_url,
@@ -59,7 +60,7 @@ router.get('/', optionalAuth, async (req, res) => {
       params.push(parseFloat(min_rating));
     }
 
-    sql += ' ORDER BY avg_rating DESC, review_count DESC LIMIT ? OFFSET ?';
+    sql += ' ORDER BY u.is_god_tier DESC, avg_rating DESC, review_count DESC LIMIT ? OFFSET ?';
     params.push(parseInt(limit), parseInt(offset));
 
     const taskers = await query(sql, params);
@@ -78,11 +79,12 @@ router.get('/', optionalAuth, async (req, res) => {
           isUnlocked = !!contact;
         }
 
-        // Hide contact details unless unlocked or god tier
+        // Hide contact details unless unlocked or god tier user is viewing
+        const isViewerGodTier = req.user && req.user.tier === 'god';
         const sanitized = {
           id: tasker.id,
           name: tasker.name,
-          tier: tasker.tier,
+          tier: tasker.is_god_tier ? 'platinum' : tasker.tier,
           service_postcode: tasker.service_postcode,
           service_radius_km: tasker.service_radius_km,
           profile_photo_url: tasker.profile_photo_url,
@@ -90,8 +92,17 @@ router.get('/', optionalAuth, async (req, res) => {
           review_count: tasker.review_count,
           avg_rating: tasker.avg_rating ? parseFloat(tasker.avg_rating).toFixed(1) : null,
           professions: tasker.professions ? tasker.professions.split(',') : [],
-          is_unlocked: isUnlocked
+          is_unlocked: isUnlocked || isViewerGodTier || tasker.is_god_tier,
+          is_god_tier: !!tasker.is_god_tier
         };
+        
+        // Show contact details for god-tier users (if viewer is god-tier)
+        if (isViewerGodTier || tasker.is_god_tier) {
+          sanitized.phone = tasker.phone;
+          sanitized.email = tasker.email;
+          sanitized.business_phone = tasker.business_phone;
+          sanitized.business_email = tasker.business_email;
+        }
 
         return sanitized;
       })
@@ -174,7 +185,7 @@ router.get('/:id', optionalAuth, async (req, res) => {
     const isGod = req.user && req.user.tier === 'god';
 
     // Remove sensitive fields
-    delete tasker.password;
+    delete tasker.password_hash;
     delete tasker.credits;
 
     if (!isOwner && !isUnlocked && !isGod) {
@@ -201,7 +212,8 @@ router.get('/:id', optionalAuth, async (req, res) => {
         professions,
         qualifications,
         reviews,
-        is_unlocked: isUnlocked
+        is_unlocked: isUnlocked,
+        is_god_tier: false
       }
     });
   } catch (error) {
