@@ -49,16 +49,8 @@ router.post('/',
   [
     body('package_type').isIn(['customer', 'tradie']),
     body('name').trim().isLength({ min: 1, max: 100 }),
+    body('credits').optional().isInt({ min: 0 }),
     body('price_excl_tax').isFloat({ min: 0 }),
-    body('package_discount_percent').optional().isFloat({ min: 0, max: 100 }),
-    body('package_discount_dollar').optional().isFloat({ min: 0 }),
-    body('package_discount_enabled').optional().isBoolean(),
-    body('standard_credits').optional().isInt({ min: 0 }),
-    body('standard_credits_multiplier').optional().isInt({ min: 1 }),
-    body('bonus_credits').optional().isInt({ min: 0 }),
-    body('bonus_credits_multiplier').optional().isInt({ min: 1 }),
-    body('additional_bonus_credits').optional().isInt({ min: 0 }),
-    body('additional_bonus_credits_multiplier').optional().isInt({ min: 1 }),
     body('display_order').optional().isInt({ min: 0 }),
     body('enabled').optional().isBoolean()
   ],
@@ -70,11 +62,7 @@ router.post('/',
       }
 
       const allowedFields = [
-        'package_type', 'name', 'price_excl_tax',
-        'package_discount_percent', 'package_discount_dollar', 'package_discount_enabled',
-        'standard_credits', 'standard_credits_multiplier',
-        'bonus_credits', 'bonus_credits_multiplier',
-        'additional_bonus_credits', 'additional_bonus_credits_multiplier',
+        'package_type', 'name', 'credits', 'price_excl_tax',
         'display_order', 'enabled'
       ];
 
@@ -92,7 +80,7 @@ router.post('/',
       const fieldsList = fields.join(', ');
 
       const result = await run(
-        `INSERT INTO credit_packages (${fieldsList}) VALUES (${placeholders}) RETURNING id`,
+        `INSERT INTO credit_packages (${fieldsList}) VALUES (${placeholders})`,
         values
       );
 
@@ -100,7 +88,7 @@ router.post('/',
       res.status(201).json(newPkg);
     } catch (error) {
       console.error('Create package error:', error);
-      res.status(500).json({ error: 'Failed to create package' });
+      res.status(500).json({ error: 'Failed to create package', details: error.message });
     }
   }
 );
@@ -110,16 +98,8 @@ router.put('/:id',
   [
     body('package_type').optional().isIn(['customer', 'tradie']),
     body('name').optional().trim().isLength({ min: 1, max: 100 }),
+    body('credits').optional().isInt({ min: 0 }),
     body('price_excl_tax').optional().isFloat({ min: 0 }),
-    body('package_discount_percent').optional().isFloat({ min: 0, max: 100 }),
-    body('package_discount_dollar').optional().isFloat({ min: 0 }),
-    body('package_discount_enabled').optional().isBoolean(),
-    body('standard_credits').optional().isInt({ min: 0 }),
-    body('standard_credits_multiplier').optional().isInt({ min: 1 }),
-    body('bonus_credits').optional().isInt({ min: 0 }),
-    body('bonus_credits_multiplier').optional().isInt({ min: 1 }),
-    body('additional_bonus_credits').optional().isInt({ min: 0 }),
-    body('additional_bonus_credits_multiplier').optional().isInt({ min: 1 }),
     body('display_order').optional().isInt({ min: 0 }),
     body('enabled').optional().isBoolean()
   ],
@@ -136,11 +116,7 @@ router.put('/:id',
       }
 
       const allowedFields = [
-        'package_type', 'name', 'price_excl_tax',
-        'package_discount_percent', 'package_discount_dollar', 'package_discount_enabled',
-        'standard_credits', 'standard_credits_multiplier',
-        'bonus_credits', 'bonus_credits_multiplier',
-        'additional_bonus_credits', 'additional_bonus_credits_multiplier',
+        'package_type', 'name', 'credits', 'price_excl_tax',
         'display_order', 'enabled'
       ];
 
@@ -169,7 +145,7 @@ router.put('/:id',
       res.json(updated);
     } catch (error) {
       console.error('Update package error:', error);
-      res.status(500).json({ error: 'Failed to update package' });
+      res.status(500).json({ error: 'Failed to update package', details: error.message });
     }
   }
 );
