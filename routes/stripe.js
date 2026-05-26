@@ -1,6 +1,5 @@
 const express = require('express');
 const { authenticateToken } = require('../middleware/auth');
-const db = require('../db/connection');
 const router = express.Router();
 
 // Check if Stripe is configured

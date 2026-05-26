@@ -1,6 +1,5 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
-const db = require('../db/connection'); // Use db.query() instead of get()/run()
 const { query } = require('../../db/connection');
 const { authenticateToken, requireAdmin } = require('../../middleware/auth');
 

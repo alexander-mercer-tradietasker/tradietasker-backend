@@ -1,7 +1,6 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const { body, validationResult } = require('express-validator');
-const db = require('../db/connection'); // Use db.query() instead of get()/run()
 const { query } = require('../db/connection');
 const { authenticateToken, optionalAuth, generateToken } = require('../middleware/auth');
 
