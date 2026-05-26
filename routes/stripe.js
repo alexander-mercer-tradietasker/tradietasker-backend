@@ -1,5 +1,6 @@
 const express = require('express');
 const { authenticateToken } = require('../middleware/auth');
+const db = require('../db/connection');
 const router = express.Router();
 
 // Check if Stripe is configured
@@ -80,20 +81,20 @@ router.post('/create-credits-checkout', authenticateToken, async (req, res) => {
   }
 
   try {
-    const { package: packageName } = req.body;
+    const { packageId } = req.body;
     
-    // Credit package pricing (AUD)
-    const packages = {
-      small: { credits: 10, price: 2500 },   // $25.00
-      medium: { credits: 25, price: 5000 },  // $50.00
-      large: { credits: 50, price: 9000 }    // $90.00
-    };
-
-    if (!packages[packageName]) {
-      return res.status(400).json({ error: 'Invalid package' });
+    // Get package from database
+    const result = await db.query(
+      'SELECT * FROM credit_packages WHERE id = $1 AND enabled = true',
+      [packageId]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(400).json({ error: 'Invalid or disabled package' });
     }
 
-    const pkg = packages[packageName];
+    const pkg = result.rows[0];
+    const priceInCents = Math.round(parseFloat(pkg.price_excl_tax) * 100);
     
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
@@ -104,18 +105,19 @@ router.post('/create-credits-checkout', authenticateToken, async (req, res) => {
           price_data: {
             currency: 'aud',
             product_data: {
-              name: `${pkg.credits} Credits`,
-              description: `TradieTasker credit package`
+              name: `${pkg.name} Package - ${pkg.credits} Credits`,
+              description: `TradieTasker ${pkg.package_type} credit package`
             },
-            unit_amount: pkg.price,
+            unit_amount: priceInCents,
           },
           quantity: 1,
         },
       ],
-      success_url: `${getFrontendUrl()}/package-success?session_id={CHECKOUT_SESSION_ID}&credits=${pkg.credits}`,
+      success_url: `${getFrontendUrl()}/package-success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${getFrontendUrl()}/subscription/upgrade`,
       metadata: {
         user_id: req.user.id,
+        package_id: pkg.id,
         credits: pkg.credits,
         type: 'credits'
       }

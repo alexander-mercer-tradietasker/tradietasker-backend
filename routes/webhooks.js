@@ -123,8 +123,23 @@ case 'checkout.session.completed': {
       const amount = session.amount_total / 100;
       await generateInvoice(user_id, amount, `${tier} subscription`, session.invoice || null);
     }
+  } else if (user_id && type === 'credits') {
+    // Credit package purchase
+    const credits = parseInt(session.metadata.credits);
+    
+    // Add credits to user
+    await pool.query(
+      'UPDATE users SET credits = credits + $1 WHERE id = $2',
+      [credits, user_id]
+    );
+    
+    console.log(`Added ${credits} credits to user ${user_id}`);
+    
+    // Generate invoice
+    const amount = session.amount_total / 100;
+    await generateInvoice(user_id, amount, `${credits} Credits Purchase`, session.invoice || null);
   } else if (user_id) {
-    // Fallback for non-subscription payments
+    // Fallback for other payments
     const amount = session.amount_total / 100;
     await generateInvoice(user_id, amount, 'Payment via Stripe Checkout', session.invoice || null);
   }
