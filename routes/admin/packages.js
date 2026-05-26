@@ -51,6 +51,9 @@ router.post('/',
     body('name').trim().isLength({ min: 1, max: 100 }),
     body('credits').optional().isInt({ min: 0 }),
     body('price_excl_tax').isFloat({ min: 0 }),
+    body('discount_percent').optional().isFloat({ min: 0, max: 100 }),
+    body('discount_dollar').optional().isFloat({ min: 0 }),
+    body('discount_enabled').optional().isBoolean(),
     body('display_order').optional().isInt({ min: 0 }),
     body('enabled').optional().isBoolean()
   ],
@@ -63,6 +66,7 @@ router.post('/',
 
       const allowedFields = [
         'package_type', 'name', 'credits', 'price_excl_tax',
+        'discount_percent', 'discount_dollar', 'discount_enabled',
         'display_order', 'enabled'
       ];
 
@@ -100,6 +104,9 @@ router.put('/:id',
     body('name').optional().trim().isLength({ min: 1, max: 100 }),
     body('credits').optional().isInt({ min: 0 }),
     body('price_excl_tax').optional().isFloat({ min: 0 }),
+    body('discount_percent').optional().isFloat({ min: 0, max: 100 }),
+    body('discount_dollar').optional().isFloat({ min: 0 }),
+    body('discount_enabled').optional().isBoolean(),
     body('display_order').optional().isInt({ min: 0 }),
     body('enabled').optional().isBoolean()
   ],
@@ -117,6 +124,7 @@ router.put('/:id',
 
       const allowedFields = [
         'package_type', 'name', 'credits', 'price_excl_tax',
+        'discount_percent', 'discount_dollar', 'discount_enabled',
         'display_order', 'enabled'
       ];
 
