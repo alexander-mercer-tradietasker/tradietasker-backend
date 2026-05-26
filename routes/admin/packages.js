@@ -8,7 +8,7 @@ const router = express.Router();
 router.use(authenticateToken);
 router.use(requireAdmin);
 
-// GET /api/admin/packages - List all packages
+// GET /api/admin/packages
 router.get('/', async (req, res) => {
   try {
     const { type } = req.query;
@@ -30,7 +30,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-// GET /api/admin/packages/:id - Get single package
+// GET /api/admin/packages/:id
 router.get('/:id', async (req, res) => {
   try {
     const pkg = await get('SELECT * FROM credit_packages WHERE id = ?', [req.params.id]);
@@ -44,13 +44,21 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// POST /api/admin/packages - Create package
+// POST /api/admin/packages
 router.post('/',
   [
     body('package_type').isIn(['customer', 'tradie']),
     body('name').trim().isLength({ min: 1, max: 100 }),
-    body('credits').isInt({ min: 1 }),
     body('price_excl_tax').isFloat({ min: 0 }),
+    body('package_discount_percent').optional().isFloat({ min: 0, max: 100 }),
+    body('package_discount_dollar').optional().isFloat({ min: 0 }),
+    body('package_discount_enabled').optional().isBoolean(),
+    body('standard_credits').optional().isInt({ min: 0 }),
+    body('standard_credits_multiplier').optional().isInt({ min: 1 }),
+    body('bonus_credits').optional().isInt({ min: 0 }),
+    body('bonus_credits_multiplier').optional().isInt({ min: 1 }),
+    body('additional_bonus_credits').optional().isInt({ min: 0 }),
+    body('additional_bonus_credits_multiplier').optional().isInt({ min: 1 }),
     body('display_order').optional().isInt({ min: 0 }),
     body('enabled').optional().isBoolean()
   ],
@@ -61,12 +69,31 @@ router.post('/',
         return res.status(400).json({ errors: errors.array() });
       }
 
-      const { package_type, name, credits, price_excl_tax, display_order, enabled } = req.body;
+      const allowedFields = [
+        'package_type', 'name', 'price_excl_tax',
+        'package_discount_percent', 'package_discount_dollar', 'package_discount_enabled',
+        'standard_credits', 'standard_credits_multiplier',
+        'bonus_credits', 'bonus_credits_multiplier',
+        'additional_bonus_credits', 'additional_bonus_credits_multiplier',
+        'display_order', 'enabled'
+      ];
+
+      const fields = [];
+      const values = [];
+      
+      for (const field of allowedFields) {
+        if (req.body[field] !== undefined) {
+          fields.push(field);
+          values.push(req.body[field]);
+        }
+      }
+
+      const placeholders = fields.map(() => '?').join(', ');
+      const fieldsList = fields.join(', ');
 
       const result = await run(
-        `INSERT INTO credit_packages (package_type, name, credits, price_excl_tax, display_order, enabled)
-         VALUES (?, ?, ?, ?, ?, ?) RETURNING id`,
-        [package_type, name, credits, price_excl_tax, display_order || 0, enabled !== false]
+        `INSERT INTO credit_packages (${fieldsList}) VALUES (${placeholders}) RETURNING id`,
+        values
       );
 
       const newPkg = await get('SELECT * FROM credit_packages WHERE id = ?', [result.lastID]);
@@ -78,13 +105,21 @@ router.post('/',
   }
 );
 
-// PUT /api/admin/packages/:id - Update package
+// PUT /api/admin/packages/:id
 router.put('/:id',
   [
     body('package_type').optional().isIn(['customer', 'tradie']),
     body('name').optional().trim().isLength({ min: 1, max: 100 }),
-    body('credits').optional().isInt({ min: 1 }),
     body('price_excl_tax').optional().isFloat({ min: 0 }),
+    body('package_discount_percent').optional().isFloat({ min: 0, max: 100 }),
+    body('package_discount_dollar').optional().isFloat({ min: 0 }),
+    body('package_discount_enabled').optional().isBoolean(),
+    body('standard_credits').optional().isInt({ min: 0 }),
+    body('standard_credits_multiplier').optional().isInt({ min: 1 }),
+    body('bonus_credits').optional().isInt({ min: 0 }),
+    body('bonus_credits_multiplier').optional().isInt({ min: 1 }),
+    body('additional_bonus_credits').optional().isInt({ min: 0 }),
+    body('additional_bonus_credits_multiplier').optional().isInt({ min: 1 }),
     body('display_order').optional().isInt({ min: 0 }),
     body('enabled').optional().isBoolean()
   ],
@@ -100,7 +135,15 @@ router.put('/:id',
         return res.status(404).json({ error: 'Package not found' });
       }
 
-      const allowedFields = ['package_type', 'name', 'credits', 'price_excl_tax', 'display_order', 'enabled'];
+      const allowedFields = [
+        'package_type', 'name', 'price_excl_tax',
+        'package_discount_percent', 'package_discount_dollar', 'package_discount_enabled',
+        'standard_credits', 'standard_credits_multiplier',
+        'bonus_credits', 'bonus_credits_multiplier',
+        'additional_bonus_credits', 'additional_bonus_credits_multiplier',
+        'display_order', 'enabled'
+      ];
+
       const updates = {};
       for (const field of Object.keys(req.body)) {
         if (allowedFields.includes(field)) {
@@ -131,7 +174,7 @@ router.put('/:id',
   }
 );
 
-// DELETE /api/admin/packages/:id - Delete package
+// DELETE /api/admin/packages/:id
 router.delete('/:id', async (req, res) => {
   try {
     const existing = await get('SELECT id FROM credit_packages WHERE id = ?', [req.params.id]);
