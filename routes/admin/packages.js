@@ -1,6 +1,6 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
-const { query, get, run } = require('../../db/connection');
+const { query } = require('../../db/connection');
 const { authenticateToken, requireAdmin } = require('../../middleware/auth');
 
 const router = express.Router();
@@ -16,7 +16,7 @@ router.get('/', async (req, res) => {
     const params = [];
     
     if (type && ['customer', 'tradie'].includes(type)) {
-      sql += ' WHERE package_type = ?';
+      sql += ' WHERE package_type = $1';
       params.push(type);
     }
     
@@ -33,11 +33,11 @@ router.get('/', async (req, res) => {
 // GET /api/admin/packages/:id
 router.get('/:id', async (req, res) => {
   try {
-    const pkg = await get('SELECT * FROM credit_packages WHERE id = ?', [req.params.id]);
-    if (!pkg) {
+    const result = await query('SELECT * FROM credit_packages WHERE id = $1', [req.params.id]);
+    if (!result || result.length === 0) {
       return res.status(404).json({ error: 'Package not found' });
     }
-    res.json(pkg);
+    res.json(result[0]);
   } catch (error) {
     console.error('Get package error:', error);
     res.status(500).json({ error: 'Failed to get package' });
@@ -80,16 +80,15 @@ router.post('/',
         }
       }
 
-      const placeholders = fields.map(() => '?').join(', ');
+      const placeholders = fields.map((_, i) => `$${i + 1}`).join(', ');
       const fieldsList = fields.join(', ');
 
-      const result = await run(
-        `INSERT INTO credit_packages (${fieldsList}) VALUES (${placeholders})`,
+      const result = await query(
+        `INSERT INTO credit_packages (${fieldsList}) VALUES (${placeholders}) RETURNING *`,
         values
       );
 
-      const newPkg = await get('SELECT * FROM credit_packages WHERE id = ?', [result.lastID]);
-      res.status(201).json(newPkg);
+      res.status(201).json(result[0]);
     } catch (error) {
       console.error('Create package error:', error);
       res.status(500).json({ error: 'Failed to create package', details: error.message });
@@ -117,8 +116,8 @@ router.put('/:id',
         return res.status(400).json({ errors: errors.array() });
       }
 
-      const existing = await get('SELECT id FROM credit_packages WHERE id = ?', [req.params.id]);
-      if (!existing) {
+      const existingResult = await query('SELECT id FROM credit_packages WHERE id = $1', [req.params.id]);
+      if (!existingResult || existingResult.length === 0) {
         return res.status(404).json({ error: 'Package not found' });
       }
 
@@ -140,17 +139,16 @@ router.put('/:id',
         return res.status(400).json({ error: 'No valid fields to update' });
       }
 
-      const setClause = fields.map(f => `${f} = ?`).join(', ');
+      const setClause = fields.map((f, i) => `${f} = $${i + 1}`).join(', ');
       const values = fields.map(f => updates[f]);
       values.push(req.params.id);
 
-      await run(
-        `UPDATE credit_packages SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+      const result = await query(
+        `UPDATE credit_packages SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE id = $${values.length} RETURNING *`,
         values
       );
 
-      const updated = await get('SELECT * FROM credit_packages WHERE id = ?', [req.params.id]);
-      res.json(updated);
+      res.json(result[0]);
     } catch (error) {
       console.error('Update package error:', error);
       res.status(500).json({ error: 'Failed to update package', details: error.message });
@@ -161,12 +159,12 @@ router.put('/:id',
 // DELETE /api/admin/packages/:id
 router.delete('/:id', async (req, res) => {
   try {
-    const existing = await get('SELECT id FROM credit_packages WHERE id = ?', [req.params.id]);
-    if (!existing) {
+    const existingResult = await query('SELECT id FROM credit_packages WHERE id = $1', [req.params.id]);
+    if (!existingResult || existingResult.length === 0) {
       return res.status(404).json({ error: 'Package not found' });
     }
 
-    await run('DELETE FROM credit_packages WHERE id = ?', [req.params.id]);
+    await query('DELETE FROM credit_packages WHERE id = $1', [req.params.id]);
     res.json({ message: 'Package deleted successfully' });
   } catch (error) {
     console.error('Delete package error:', error);
