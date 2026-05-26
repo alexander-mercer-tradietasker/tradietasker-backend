@@ -21,7 +21,6 @@ const profileUnlockRoutes = require('./routes/profileUnlocks');
 const webhookRoutes = require('./routes/webhooks');
 const adminRoutes = require('./routes/admin');
 const adminAuthRoutes = require('./routes/adminAuth');
-const adminStatsRoutes = require('./routes/adminStats');
 const adminTiersRoutes = require('./routes/admin/tiers');
 const adminTaxRoutes = require('./routes/admin/tax');
 const adminSettingsRoutes = require('./routes/admin/settings');
