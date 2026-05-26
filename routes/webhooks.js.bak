@@ -89,47 +89,21 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
 
   try {
     switch (event.type) {
-case 'checkout.session.completed': {
-  const session = event.data.object;
-  const { user_id, tier, type } = session.metadata || {};
-  
-  if (user_id && type === 'subscription' && tier) {
-    // Get tier config from database
-    const tierResult = await pool.query('SELECT * FROM tiers WHERE tier_name = $1', [tier]);
-    if (tierResult.rows.length > 0) {
-      const tierConfig = tierResult.rows[0];
-      const totalCredits = 
-        (tierConfig.base_credits * tierConfig.base_credits_multiplier) +
-        (tierConfig.bonus_credits * tierConfig.bonus_credits_multiplier) +
-        (tierConfig.additional_bonus_credits * tierConfig.additional_bonus_credits_multiplier) +
-        tierConfig.initial_purchase_bonus_credits;
-      
-      // Update user tier and credits
-      await pool.query(
-        'UPDATE users SET tier = $1, credits = credits + $2 WHERE id = $3',
-        [tier, totalCredits, user_id]
-      );
-      
-      // Create subscription record
-      const renewsAt = new Date();
-      renewsAt.setDate(renewsAt.getDate() + 7);
-      await pool.query(
-        `INSERT INTO subscriptions (user_id, tier, credits_included, credits_remaining, price_per_week, starts_at, renews_at, is_active)
-         VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP, $6, true)`,
-        [user_id, tier, totalCredits, totalCredits, tierConfig.subscription_cost_excl_tax, renewsAt]
-      );
-      
-      // Generate invoice
-      const amount = session.amount_total / 100;
-      await generateInvoice(user_id, amount, `${tier} subscription`, session.invoice || null);
-    }
-  } else if (user_id) {
-    // Fallback for non-subscription payments
-    const amount = session.amount_total / 100;
-    await generateInvoice(user_id, amount, 'Payment via Stripe Checkout', session.invoice || null);
-  }
-  break;
-}
+      case 'checkout.session.completed': {
+        const session = event.data.object;
+        const { userId, description } = session.metadata || {};
+        
+        if (userId) {
+          const amount = session.amount_total / 100; // Convert cents to dollars
+          await generateInvoice(
+            userId, 
+            amount, 
+            description || 'Payment via Stripe Checkout',
+            session.invoice || null
+          );
+        }
+        break;
+      }
 
       case 'invoice.payment_succeeded': {
         const invoice = event.data.object;
