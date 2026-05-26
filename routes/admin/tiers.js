@@ -86,14 +86,44 @@ router.put('/:tier',
         return res.status(404).json({ error: 'Tier not found' });
       }
 
-      // Build update query
-      const fields = Object.keys(updates);
+      // Whitelist of allowed update fields
+      const allowedFields = [
+        'subscription_cost_excl_tax',
+        'tier_discount_percent',
+        'tier_discount_dollar',
+        'tier_discount_enabled',
+        'tier_discount_expiry',
+        'base_credits',
+        'base_credits_multiplier',
+        'bonus_credits',
+        'bonus_credits_multiplier',
+        'additional_bonus_credits',
+        'additional_bonus_credits_multiplier',
+        'initial_purchase_bonus_credits',
+        'recurring_bonus_credits',
+        'job_view_delay_minutes'
+      ];
+
+      // Filter updates to only allowed fields and handle null values
+      const filteredUpdates = {};
+      for (const field of Object.keys(updates)) {
+        if (allowedFields.includes(field)) {
+          // Convert null/empty string to NULL for optional timestamp fields
+          if (field === 'tier_discount_expiry' && (!updates[field] || updates[field] === '')) {
+            filteredUpdates[field] = null;
+          } else {
+            filteredUpdates[field] = updates[field];
+          }
+        }
+      }
+
+      const fields = Object.keys(filteredUpdates);
       if (fields.length === 0) {
-        return res.status(400).json({ error: 'No fields to update' });
+        return res.status(400).json({ error: 'No valid fields to update' });
       }
 
       const setClause = fields.map(f => `${f} = ?`).join(', ');
-      const values = fields.map(f => updates[f]);
+      const values = fields.map(f => filteredUpdates[f]);
       values.push(tier);
 
       await run(
