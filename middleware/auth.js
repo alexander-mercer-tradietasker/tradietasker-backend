@@ -24,7 +24,18 @@ function authenticateToken(req, res, next) {
     }
 
     try {
-      // Load user from database
+      // Handle admin tokens (have username/role instead of userId)
+      if (decoded.role === 'admin' && decoded.username) {
+        req.user = {
+          id: null,
+          username: decoded.username,
+          role: 'admin',
+          tier: 'god'
+        };
+        return next();
+      }
+
+      // Load regular user from database
       const result = await pool.query('SELECT * FROM users WHERE id = $1', [decoded.userId]);
       const user = result.rows[0];
       
