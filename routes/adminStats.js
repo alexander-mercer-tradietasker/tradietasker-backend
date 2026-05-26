@@ -9,7 +9,7 @@ router.use(authenticateAdmin);
 router.get('/stats', async (req, res) => {
   try {
     // User stats
-    const userStats = await query(`
+    const userStats = (await query(`
       SELECT 
         COUNT(*) as total_users,
         SUM(CASE WHEN tier = 'god' THEN 1 ELSE 0 END) as god_users,
@@ -17,7 +17,7 @@ router.get('/stats', async (req, res) => {
         SUM(CASE WHEN tier = 'free' THEN 1 ELSE 0 END) as free_users,
         SUM(CASE WHEN role IN ('tasker', 'both') THEN 1 ELSE 0 END) as taskers,
         SUM(CASE WHEN role IN ('poster', 'both') THEN 1 ELSE 0 END) as posters
-      FROM users
+      FROM users)[0]
     `);
 
     // Promo code stats (placeholder - table doesn't exist yet)
