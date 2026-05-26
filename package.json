@@ -7,6 +7,7 @@
     "init": "node init-db.js",
     "migrate": "node migrate.js",
     "migrate:prod": "node migrate.js $DATABASE_URL",
+    "migrate:admin": "node run-admin-migration.js",
     "seed": "node seed-expanded-test-data.js",
     "test": "node test-schema.js",
     "start": "node server.js",
