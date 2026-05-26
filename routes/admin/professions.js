@@ -72,7 +72,7 @@ router.put('/:id', async (req, res) => {
     );
 
     if (existing.length === 0) {
-      return res.status(404).json({ error: 'Profession not found' });
+      return res.status(404).json({ error: 'Profession not found' })[0];
     }
 
     await query('UPDATE professions SET name = $1, category = $2, description = $3 WHERE id = $4', [name, category, description || null, id]);

@@ -61,7 +61,7 @@ router.get('/my-code', authenticateToken, async (req, res) => {
     });
   } catch (error) {
     console.error('Get referral code error:', error);
-    res.status(500).json({ error: 'Failed to get referral code' });
+    res.status(500).json({ error: 'Failed to get referral code' })[0];
   }
 });
 

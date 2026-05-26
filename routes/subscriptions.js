@@ -20,7 +20,7 @@ router.get('/tiers', async (req, res) => {
 // GET /api/subscriptions/my-subscription
 router.get('/my-subscription', authenticateToken, async (req, res) => {
   try {
-    const subscription = await query(`SELECT * FROM subscriptions WHERE user_id = $1 AND is_active = true ORDER BY created_at DESC LIMIT 1`, [req.user.id]).then(r => r[0]);
+    const subscription = await query(`SELECT * FROM subscriptions WHERE user_id = $1 AND is_active = true ORDER BY created_at DESC LIMIT 1`, [req.user.id]).then(r => r[0])[0];
     res.json({ subscription: subscription || null, tier: req.user.tier, credits: req.user.credits });
   } catch (error) {
     console.error('Get subscription error:', error);

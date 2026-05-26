@@ -71,7 +71,7 @@ router.post('/',
       }
 
       // Check if review already exists
-      const existingReview = await query('SELECT id FROM reviews WHERE job_id = $1 AND reviewer_id = $2 AND reviewee_id = $3', [job_id, reviewer_id, reviewee_id]).then(r => r[0]);
+      const existingReview = await query('SELECT id FROM reviews WHERE job_id = $1 AND reviewer_id = $2 AND reviewee_id = $3', [job_id, reviewer_id, reviewee_id]).then(r => r[0])[0];
 
       if (existingReview) {
         return res.status(409).json({ error: 'You have already reviewed this job' });
@@ -203,7 +203,7 @@ router.post('/send-request/:jobId', authenticateToken, async (req, res) => {
       FROM jobs j
       LEFT JOIN users customer ON j.user_id = customer.id
       LEFT JOIN users tradie ON j.assigned_tradie_id = tradie.id
-      WHERE j.id = $1`, [jobId]).then(r => r[0]);
+      WHERE j.id = $1`, [jobId]).then(r => r[0])[0];
 
     if (!job) {
       return res.status(404).json({ error: 'Job not found' });
