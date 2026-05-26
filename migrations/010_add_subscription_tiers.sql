@@ -62,5 +62,5 @@ CREATE TABLE IF NOT EXISTS site_wide_discount (
 
 -- Insert default site-wide discount (disabled)
 INSERT INTO site_wide_discount (percent, dollar, enabled)
-VALUES (0.00, 0.00, false)
-ON CONFLICT DO NOTHING;
+SELECT 0.00, 0.00, false
+WHERE NOT EXISTS (SELECT 1 FROM site_wide_discount);
