@@ -39,7 +39,7 @@ router.get('/:tier', async (req, res) => {
   try {
     const { tier } = req.params;
     
-    const tierConfig = await get('SELECT * FROM tiers WHERE tier_name = ?', [tier]);
+    const tierConfig = const result = await query('SELECT * FROM tiers WHERE tier_name = $1', [tier]); const tierConfig = result[0];
     
     if (!tierConfig) {
       return res.status(404).json({ error: 'Tier not found' });
@@ -81,7 +81,7 @@ router.put('/:tier',
       const updates = req.body;
 
       // Check tier exists
-      const existing = await get('SELECT id FROM tiers WHERE tier_name = ?', [tier]);
+      const existingResult = await query('SELECT id FROM tiers WHERE tier_name = $1', [tier]); const existing = existingResult[0];
       if (!existing) {
         return res.status(404).json({ error: 'Tier not found' });
       }
@@ -132,7 +132,7 @@ router.put('/:tier',
       );
 
       // Return updated tier config
-      const updated = await get('SELECT * FROM tiers WHERE tier_name = ?', [tier]);
+      const updated = const result = await query('SELECT * FROM tiers WHERE tier_name = $1', [tier]); const tierConfig = result[0];
       res.json(updated);
     } catch (error) {
       console.error('Update tier error:', error);
@@ -146,7 +146,7 @@ router.get('/preview-price/:tier', async (req, res) => {
   try {
     const { tier } = req.params;
     
-    const tierConfig = await get('SELECT * FROM tiers WHERE tier_name = ?', [tier]);
+    const tierConfig = const result = await query('SELECT * FROM tiers WHERE tier_name = $1', [tier]); const tierConfig = result[0];
     if (!tierConfig) {
       return res.status(404).json({ error: 'Tier not found' });
     }
