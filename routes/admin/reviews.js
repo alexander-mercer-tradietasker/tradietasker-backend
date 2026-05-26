@@ -109,7 +109,7 @@ router.get('/:id', async (req, res) => {
       LEFT JOIN users reviewer ON r.reviewer_id = reviewer.id
       LEFT JOIN users reviewee ON r.reviewee_id = reviewee.id
       LEFT JOIN jobs j ON r.job_id = j.id
-      WHERE r.id = ?
+      WHERE r.id = $1
     `, [id]);
 
     if (review.length === 0) {
@@ -129,10 +129,7 @@ router.put('/:id/flag', async (req, res) => {
     const { id } = req.params;
     const { reason } = req.body;
 
-    await run(
-      'UPDATE reviews SET is_flagged = TRUE, flag_reason = ?, flagged_at = CURRENT_TIMESTAMP WHERE id = ?',
-      [reason || 'Flagged by admin', id]
-    );
+    await query('UPDATE reviews SET is_flagged = TRUE, flag_reason = $1, flagged_at = CURRENT_TIMESTAMP WHERE id = $2', [reason || 'Flagged by admin', id]);
 
     res.json({ message: 'Review flagged successfully' });
   } catch (error) {
@@ -146,10 +143,7 @@ router.put('/:id/unflag', async (req, res) => {
   try {
     const { id } = req.params;
 
-    await run(
-      'UPDATE reviews SET is_flagged = FALSE, flag_reason = NULL, flagged_at = NULL WHERE id = ?',
-      [id]
-    );
+    await query('UPDATE reviews SET is_flagged = FALSE, flag_reason = NULL, flagged_at = NULL WHERE id = $1', [id]);
 
     res.json({ message: 'Review unflagged successfully' });
   } catch (error) {
@@ -163,7 +157,7 @@ router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
 
-    await run('DELETE FROM reviews WHERE id = ?', [id]);
+    await query('DELETE FROM reviews WHERE id = $1', [id]);
 
     res.json({ message: 'Review deleted successfully' });
   } catch (error) {

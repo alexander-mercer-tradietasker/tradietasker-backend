@@ -38,34 +38,27 @@ router.get('/my-customers', authenticateToken, async (req, res) => {
 router.get('/:id', authenticateToken, async (req, res) => {
   try {
     // Check if tradie has unlocked this customer
-    const unlock = await get(
-      `SELECT ct.* FROM contact_transactions ct
-       WHERE ct.from_user_id = ? AND ct.to_user_id = ?`,
-      [req.user.id, req.params.id]
-    );
+    const unlock = await query(`SELECT ct.* FROM contact_transactions ct
+       WHERE ct.from_user_id = $1 AND ct.to_user_id = $2`, [req.user.id, req.params.id]).then(r => r[0]);
 
     if (!unlock) {
       return res.status(403).json({ error: 'Customer not unlocked' });
     }
 
     // Get customer details
-    const customer = await get(
-      `SELECT id, name, email, phone, residential_address, residential_suburb, 
+    const customer = await query(`SELECT id, name, email, phone, residential_address, residential_suburb, 
               residential_state, residential_postcode
-       FROM users WHERE id = ?`,
-      [req.params.id]
-    );
+       FROM users WHERE id = $1`, [req.params.id]).then(r => r[0]);
 
     if (!customer) {
       return res.status(404).json({ error: 'Customer not found' });
     }
 
     // Get jobs associated with this customer
-    const jobs = await query(
-      `SELECT j.*, jt.name as job_type_name
+    const jobs = await query(`SELECT j.*, jt.name as job_type_name
        FROM jobs j
        LEFT JOIN job_types jt ON j.job_type_id = jt.id
-       WHERE j.poster_id = ?
+       WHERE j.poster_id = $1
        ORDER BY j.created_at DESC`,
       [req.params.id]
     );

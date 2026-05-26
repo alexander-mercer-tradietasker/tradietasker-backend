@@ -1,6 +1,7 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
-const { query, get, run } = require('../db/connection');
+const db = require('../db/connection'); // Use db.query() instead of get()/run()
+const { query } = require('../db/connection');
 const { authenticateToken } = require('../middleware/auth');
 
 const router = express.Router();
@@ -8,7 +9,7 @@ const router = express.Router();
 // GET /api/subscriptions/tiers - List subscription tiers (from database)
 router.get('/tiers', async (req, res) => {
   try {
-    const tiers = await query('SELECT * FROM tiers WHERE tier_name != ? ORDER BY subscription_cost_excl_tax', ['basic']);
+    const tiers = await query('SELECT * FROM tiers WHERE tier_name != $1 ORDER BY subscription_cost_excl_tax', ['basic']);
     res.json({ tiers });
   } catch (error) {
     console.error('Get tiers error:', error);
@@ -19,10 +20,7 @@ router.get('/tiers', async (req, res) => {
 // GET /api/subscriptions/my-subscription
 router.get('/my-subscription', authenticateToken, async (req, res) => {
   try {
-    const subscription = await get(
-      `SELECT * FROM subscriptions WHERE user_id = ? AND is_active = true ORDER BY created_at DESC LIMIT 1`,
-      [req.user.id]
-    );
+    const subscription = await query(`SELECT * FROM subscriptions WHERE user_id = $1 AND is_active = true ORDER BY created_at DESC LIMIT 1`, [req.user.id]).then(r => r[0]);
     res.json({ subscription: subscription || null, tier: req.user.tier, credits: req.user.credits });
   } catch (error) {
     console.error('Get subscription error:', error);
@@ -42,12 +40,12 @@ router.post('/subscribe',
       }
 
       const { tier } = req.body;
-      const tierConfig = await get('SELECT * FROM tiers WHERE tier_name = ?', [tier]);
+      const tierConfig = await query('SELECT * FROM tiers WHERE tier_name = $1', [tier]).then(r => r[0]);
       if (!tierConfig) {
         return res.status(404).json({ error: 'Tier not found' });
       }
 
-      await run('UPDATE subscriptions SET is_active = false WHERE user_id = ?', [req.user.id]);
+      await query('UPDATE subscriptions SET is_active = false WHERE user_id = $1 RETURNING *', [req.user.id]);
 
       const renewsAt = new Date();
       renewsAt.setDate(renewsAt.getDate() + 7);
@@ -58,13 +56,10 @@ router.post('/subscribe',
         (tierConfig.additional_bonus_credits * tierConfig.additional_bonus_credits_multiplier) +
         tierConfig.initial_purchase_bonus_credits;
 
-      await run(
-        `INSERT INTO subscriptions (user_id, tier, credits_included, credits_remaining, price_per_week, starts_at, renews_at, is_active, created_at)
-         VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, true, CURRENT_TIMESTAMP)`,
-        [req.user.id, tier, totalCredits, totalCredits, tierConfig.subscription_cost_excl_tax, renewsAt.toISOString()]
-      );
+      await query(`INSERT INTO subscriptions (user_id, tier, credits_included, credits_remaining, price_per_week, starts_at, renews_at, is_active, created_at)
+         VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP, $6, true, CURRENT_TIMESTAMP)`, [req.user.id, tier, totalCredits, totalCredits, tierConfig.subscription_cost_excl_tax, renewsAt.toISOString()]);
 
-      await run('UPDATE users SET tier = ?, credits = credits + ? WHERE id = ?', [tier, totalCredits, req.user.id]);
+      await query('UPDATE users SET tier = $1, credits = credits + $2 WHERE id = $3 RETURNING *', [tier, totalCredits, req.user.id]);
 
       res.json({ message: 'Subscription created', tier, credits_added: totalCredits });
     } catch (error) {
@@ -88,17 +83,17 @@ router.put('/change-tier',
       const { tier } = req.body;
 
       if (tier === 'basic') {
-        await run('UPDATE subscriptions SET is_active = false WHERE user_id = ?', [req.user.id]);
-        await run('UPDATE users SET tier = ? WHERE id = ?', ['basic', req.user.id]);
+        await query('UPDATE subscriptions SET is_active = false WHERE user_id = $1 RETURNING *', [req.user.id]);
+        await query('UPDATE users SET tier = $1 WHERE id = $2 RETURNING *', ['basic', req.user.id]);
         return res.json({ message: 'Subscription cancelled' });
       }
 
-      const tierConfig = await get('SELECT * FROM tiers WHERE tier_name = ?', [tier]);
+      const tierConfig = await query('SELECT * FROM tiers WHERE tier_name = $1', [tier]).then(r => r[0]);
       if (!tierConfig) {
         return res.status(404).json({ error: 'Tier not found' });
       }
 
-      await run('UPDATE subscriptions SET is_active = false WHERE user_id = ?', [req.user.id]);
+      await query('UPDATE subscriptions SET is_active = false WHERE user_id = $1 RETURNING *', [req.user.id]);
 
       const renewsAt = new Date();
       renewsAt.setDate(renewsAt.getDate() + 7);
@@ -109,13 +104,10 @@ router.put('/change-tier',
         (tierConfig.additional_bonus_credits * tierConfig.additional_bonus_credits_multiplier) +
         tierConfig.initial_purchase_bonus_credits;
 
-      await run(
-        `INSERT INTO subscriptions (user_id, tier, credits_included, credits_remaining, price_per_week, starts_at, renews_at, is_active, created_at)
-         VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, true, CURRENT_TIMESTAMP)`,
-        [req.user.id, tier, totalCredits, totalCredits, tierConfig.subscription_cost_excl_tax, renewsAt.toISOString()]
-      );
+      await query(`INSERT INTO subscriptions (user_id, tier, credits_included, credits_remaining, price_per_week, starts_at, renews_at, is_active, created_at)
+         VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP, $6, true, CURRENT_TIMESTAMP)`, [req.user.id, tier, totalCredits, totalCredits, tierConfig.subscription_cost_excl_tax, renewsAt.toISOString()]);
 
-      await run('UPDATE users SET tier = ?, credits = credits + ? WHERE id = ?', [tier, totalCredits, req.user.id]);
+      await query('UPDATE users SET tier = $1, credits = credits + $2 WHERE id = $3 RETURNING *', [tier, totalCredits, req.user.id]);
 
       res.json({ message: 'Tier changed', tier, credits_added: totalCredits });
     } catch (error) {
@@ -128,8 +120,8 @@ router.put('/change-tier',
 // POST /api/subscriptions/cancel
 router.post('/cancel', authenticateToken, async (req, res) => {
   try {
-    await run('UPDATE subscriptions SET is_active = false WHERE user_id = ?', [req.user.id]);
-    await run('UPDATE users SET tier = ? WHERE id = ?', ['basic', req.user.id]);
+    await query('UPDATE subscriptions SET is_active = false WHERE user_id = $1 RETURNING *', [req.user.id]);
+    await query('UPDATE users SET tier = $1 WHERE id = $2 RETURNING *', ['basic', req.user.id]);
     res.json({ message: 'Subscription cancelled' });
   } catch (error) {
     console.error('Cancel subscription error:', error);

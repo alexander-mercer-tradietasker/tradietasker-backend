@@ -1,5 +1,5 @@
 const express = require('express');
-const { query, get, run } = require('../db/connection');
+const { query } = require('../db/connection');
 const { authenticateToken } = require('../middleware/auth');
 
 const router = express.Router();
@@ -18,14 +18,14 @@ router.post('/purchase', async (req, res) => {
     }
 
     // Check if buyer has enough credits
-    const buyer = await get('SELECT credits FROM users WHERE id = $1', [buyerId]);
+    const buyer = await query('SELECT credits FROM users WHERE id = $1', [buyerId]).then(r => r[0]);
     
     if (!buyer) {
       return res.status(404).json({ error: 'User not found' });
     }
 
     // Get profile unlock cost from settings
-    const setting = await get("SELECT value FROM settings WHERE key = 'profile_unlock_cost'");
+    const setting = await query("SELECT value FROM settings WHERE key = 'profile_unlock_cost'");
     const unlockCost = setting ? parseInt(setting.value) : 50; // Default 50 credits
 
     if (buyer.credits < unlockCost) {
@@ -37,43 +37,34 @@ router.post('/purchase', async (req, res) => {
     }
 
     // Check if already unlocked
-    const existing = await get(
-      'SELECT * FROM profile_unlocks WHERE buyer_id = $1 AND profile_id = $2',
-      [buyerId, profileId]
-    );
+    const existing = await query('SELECT * FROM profile_unlocks WHERE buyer_id = $1 AND profile_id = $2', [buyerId, profileId]).then(r => r[0]);
 
     if (existing) {
       return res.status(400).json({ error: 'Profile already unlocked' });
     }
 
     // Check if profile exists
-    const profile = await get('SELECT id, name, email, phone FROM users WHERE id = $1', [profileId]);
+    const profile = await query('SELECT id, name, email, phone FROM users WHERE id = $1', [profileId]).then(r => r[0]);
     
     if (!profile) {
       return res.status(404).json({ error: 'Profile not found' });
     }
 
     // Deduct credits
-    await run('UPDATE users SET credits = credits - $1 WHERE id = $2', [unlockCost, buyerId]);
+    await query('UPDATE users SET credits = credits - $1 WHERE id = $2 RETURNING *', [unlockCost, buyerId]);
 
     // Record unlock
-    await run(
-      'INSERT INTO profile_unlocks (buyer_id, profile_id, cost) VALUES ($1, $2, $3)',
-      [buyerId, profileId, unlockCost]
-    );
+    await query('INSERT INTO profile_unlocks (buyer_id, profile_id, cost) VALUES ($1, $2, $3)', [buyerId, profileId, unlockCost]);
 
     // Record transaction
-    await run(
-      `INSERT INTO transactions (user_id, type, amount, description, balance_after) 
-       VALUES ($1, $2, $3, $4, $5)`,
-      [
+    await query(`INSERT INTO transactions (user_id, type, amount, description, balance_after) 
+       VALUES ($1, $2, $3, $4, $5)`, [
         buyerId,
         'profile_unlock',
         -unlockCost,
         `Unlocked profile: ${profile.name}`,
         buyer.credits - unlockCost
-      ]
-    );
+      ]);
 
     res.json({
       success: true,
@@ -120,10 +111,7 @@ router.get('/active', async (req, res) => {
 // GET /api/profile-unlocks/status/:profileId - Check if profile is unlocked
 router.get('/status/:profileId', async (req, res) => {
   try {
-    const unlock = await get(
-      'SELECT * FROM profile_unlocks WHERE buyer_id = $1 AND profile_id = $2',
-      [req.user.id, req.params.profileId]
-    );
+    const unlock = await query('SELECT * FROM profile_unlocks WHERE buyer_id = $1 AND profile_id = $2', [req.user.id, req.params.profileId]).then(r => r[0]);
 
     res.json({ 
       unlocked: !!unlock,

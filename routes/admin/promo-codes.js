@@ -1,6 +1,7 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
-const { query, get, run } = require('../../db/connection');
+const db = require('../db/connection'); // Use db.query() instead of get()/run()
+const { query } = require('../../db/connection');
 const { authenticateToken, requireAdmin } = require('../../middleware/auth');
 
 const router = express.Router();
@@ -79,7 +80,7 @@ router.post('/',
       const code_lower = code.toLowerCase();
 
       // Check if code already exists
-      const existing = await get('SELECT id FROM promo_codes WHERE code_lower = ?', [code_lower]);
+      const existing = await query('SELECT id FROM promo_codes WHERE code_lower = $1', [code_lower]).then(r => r[0]);
       if (existing) {
         return res.status(409).json({ error: 'Promo code already exists' });
       }
@@ -90,22 +91,19 @@ router.post('/',
         expiry_date = expiry_date.split('T')[0]; // Get YYYY-MM-DD only
       }
 
-      const result = await run(
-        `INSERT INTO promo_codes (
+      const result = await query(`INSERT INTO promo_codes (
           code, code_lower, type, 
           signup_bonus_credits, discount_percent, discount_dollar,
           applicable_packages, expiry_date, usage_limit,
           enabled, created_by_admin_id
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, true, ?)`,
-        [
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, true, $10)`, [
           code, code_lower, type,
           signup_bonus_credits, discount_percent, discount_dollar,
           applicable_packages, expiry_date, usage_limit,
           req.user.id
-        ]
-      );
+        ]);
 
-      const newPromoCode = await get('SELECT * FROM promo_codes WHERE id = ?', [result.lastID]);
+      const newPromoCode = await query('SELECT * FROM promo_codes WHERE id = $1', [result.lastID]).then(r => r[0]);
       res.status(201).json(newPromoCode);
     } catch (error) {
       console.error('Create promo code error:', error);
@@ -137,7 +135,7 @@ router.put('/:id',
       const { id } = req.params;
       const updates = req.body;
 
-      const existing = await get('SELECT id FROM promo_codes WHERE id = ?', [id]);
+      const existing = await query('SELECT id FROM promo_codes WHERE id = $1', [id]).then(r => r[0]);
       if (!existing) {
         return res.status(404).json({ error: 'Promo code not found' });
       }
@@ -162,12 +160,11 @@ router.put('/:id',
       const values = fields.map(f => updates[f]);
       values.push(id);
 
-      await run(
-        `UPDATE promo_codes SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+      await query(`UPDATE promo_codes SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
         values
       );
 
-      const updated = await get('SELECT * FROM promo_codes WHERE id = ?', [id]);
+      const updated = await query('SELECT * FROM promo_codes WHERE id = $1', [id]).then(r => r[0]);
       res.json(updated);
     } catch (error) {
       console.error('Update promo code error:', error);
@@ -181,12 +178,12 @@ router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
 
-    const existing = await get('SELECT id FROM promo_codes WHERE id = ?', [id]);
+    const existing = await query('SELECT id FROM promo_codes WHERE id = $1', [id]).then(r => r[0]);
     if (!existing) {
       return res.status(404).json({ error: 'Promo code not found' });
     }
 
-    await run('DELETE FROM promo_codes WHERE id = ?', [id]);
+    await query('DELETE FROM promo_codes WHERE id = $1', [id]);
     res.json({ message: 'Promo code deleted successfully' });
   } catch (error) {
     console.error('Delete promo code error:', error);
@@ -199,18 +196,18 @@ router.post('/:id/toggle', async (req, res) => {
   try {
     const { id } = req.params;
 
-    const existing = await get('SELECT enabled FROM promo_codes WHERE id = ?', [id]);
+    const existing = await query('SELECT enabled FROM promo_codes WHERE id = $1', [id]).then(r => r[0]);
     if (!existing) {
       return res.status(404).json({ error: 'Promo code not found' });
     }
 
     const newEnabled = !existing.enabled;
-    await run(
-      'UPDATE promo_codes SET enabled = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+    await query(
+      'UPDATE promo_codes SET enabled = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3',
       [newEnabled, id]
     );
 
-    const updated = await get('SELECT * FROM promo_codes WHERE id = ?', [id]);
+    const updated = await query('SELECT * FROM promo_codes WHERE id = $1', [id]).then(r => r[0]);
     res.json(updated);
   } catch (error) {
     console.error('Toggle promo code error:', error);
@@ -223,7 +220,7 @@ router.get('/:id/usage', async (req, res) => {
   try {
     const { id } = req.params;
 
-    const promoCode = await get('SELECT * FROM promo_codes WHERE id = ?', [id]);
+    const promoCode = await query('SELECT * FROM promo_codes WHERE id = $1', [id]).then(r => r[0]);
     if (!promoCode) {
       return res.status(404).json({ error: 'Promo code not found' });
     }
@@ -236,7 +233,7 @@ router.get('/:id/usage', async (req, res) => {
         u.account_number
       FROM promo_code_usage pcu
       JOIN users u ON pcu.user_id = u.id
-      WHERE pcu.promo_code_id = ?
+      WHERE pcu.promo_code_id = $1
       ORDER BY pcu.used_at DESC
     `, [id]);
 

@@ -1,6 +1,7 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
-const { query, get, run } = require('../../db/connection');
+const db = require('../db/connection'); // Use db.query() instead of get()/run()
+const { query } = require('../../db/connection');
 const { authenticateToken, requireAdmin } = require('../../middleware/auth');
 
 const router = express.Router();
@@ -38,13 +39,10 @@ router.put('/', async (req, res) => {
 
     // Upsert each setting
     for (const [key, value] of Object.entries(updates)) {
-      await run(
-        `INSERT INTO site_settings (setting_key, setting_value, updated_at)
-         VALUES (?, ?, CURRENT_TIMESTAMP)
+      await query(`INSERT INTO site_settings (setting_key, setting_value, updated_at)
+         VALUES ($1, $2, CURRENT_TIMESTAMP)
          ON CONFLICT (setting_key) 
-         DO UPDATE SET setting_value = ?, updated_at = CURRENT_TIMESTAMP`,
-        [key, value, value]
-      );
+         DO UPDATE SET setting_value = $3, updated_at = CURRENT_TIMESTAMP`, [key, value, value]);
     }
 
     // Return updated settings
@@ -74,13 +72,10 @@ router.put('/:key',
       const { key } = req.params;
       const { value } = req.body;
 
-      await run(
-        `INSERT INTO site_settings (setting_key, setting_value, updated_at)
-         VALUES (?, ?, CURRENT_TIMESTAMP)
+      await query(`INSERT INTO site_settings (setting_key, setting_value, updated_at)
+         VALUES ($1, $2, CURRENT_TIMESTAMP)
          ON CONFLICT (setting_key) 
-         DO UPDATE SET setting_value = ?, updated_at = CURRENT_TIMESTAMP`,
-        [key, value, value]
-      );
+         DO UPDATE SET setting_value = $3, updated_at = CURRENT_TIMESTAMP`, [key, value, value]);
 
       res.json({ setting_key: key, setting_value: value });
     } catch (error) {

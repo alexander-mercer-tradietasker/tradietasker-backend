@@ -71,11 +71,8 @@ router.get('/', optionalAuth, async (req, res) => {
         let isUnlocked = false;
 
         if (req.user) {
-          const contact = await get(
-            `SELECT id FROM contact_transactions 
-             WHERE from_user_id = ? AND to_user_id = ? AND type IN ('poster-unlock-tradie', 'send-profile')`,
-            [req.user.id, tasker.id]
-          );
+          const contact = await query(`SELECT id FROM contact_transactions 
+             WHERE from_user_id = $1 AND to_user_id = $2 AND type IN ('poster-unlock-tradie', 'send-profile')`, [req.user.id, tasker.id]).then(r => r[0]);
           isUnlocked = !!contact;
         }
 
@@ -121,40 +118,34 @@ router.get('/', optionalAuth, async (req, res) => {
 // GET /api/taskers/:id - Get tasker profile
 router.get('/:id', optionalAuth, async (req, res) => {
   try {
-    const tasker = await get(
-      `SELECT 
+    const tasker = await query(`SELECT 
         u.*,
         COUNT(DISTINCT r.id) as review_count,
         AVG(r.stars) as avg_rating
       FROM users u
       LEFT JOIN reviews r ON u.id = r.reviewee_id
-      WHERE u.id = ? AND u.role IN ('tasker', 'both')
-      GROUP BY u.id`,
-      [req.params.id]
-    );
+      WHERE u.id = $1 AND u.role IN ('tasker', 'both')
+      GROUP BY u.id`, [req.params.id]).then(r => r[0]);
 
     if (!tasker) {
       return res.status(404).json({ error: 'Tasker not found' });
     }
 
     // Get professions
-    const professions = await query(
-      `SELECT p.id, p.name, p.category, p.requires_licence, up.licence_number, up.state
+    const professions = await query(`SELECT p.id, p.name, p.category, p.requires_licence, up.licence_number, up.state
        FROM user_professions up
        JOIN professions p ON up.profession_id = p.id
-       WHERE up.user_id = ?`,
+       WHERE up.user_id = $1`,
       [req.params.id]
     );
 
     // Get qualifications
-    const qualifications = await query(
-      'SELECT * FROM user_qualifications WHERE user_id = ?',
+    const qualifications = await query('SELECT * FROM user_qualifications WHERE user_id = $1',
       [req.params.id]
     );
 
     // Get recent reviews
-    const reviews = await query(
-      `SELECT 
+    const reviews = await query(`SELECT 
         r.stars,
         r.comment,
         r.created_at,
@@ -163,7 +154,7 @@ router.get('/:id', optionalAuth, async (req, res) => {
       FROM reviews r
       JOIN users reviewer ON r.reviewer_id = reviewer.id
       JOIN jobs j ON r.job_id = j.id
-      WHERE r.reviewee_id = ?
+      WHERE r.reviewee_id = $1
       ORDER BY r.created_at DESC
       LIMIT 10`,
       [req.params.id]
@@ -172,11 +163,8 @@ router.get('/:id', optionalAuth, async (req, res) => {
     // Check if user has unlocked this tasker
     let isUnlocked = false;
     if (req.user) {
-      const contact = await get(
-        `SELECT id FROM contact_transactions 
-         WHERE from_user_id = ? AND to_user_id = ? AND type IN ('poster-unlock-tradie', 'send-profile')`,
-        [req.user.id, req.params.id]
-      );
+      const contact = await query(`SELECT id FROM contact_transactions 
+         WHERE from_user_id = $1 AND to_user_id = $2 AND type IN ('poster-unlock-tradie', 'send-profile')`, [req.user.id, req.params.id]).then(r => r[0]);
       isUnlocked = !!contact;
     }
 

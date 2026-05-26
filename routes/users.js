@@ -1,6 +1,7 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
-const { query, get, run } = require('../db/connection');
+const db = require('../db/connection'); // Use db.query() instead of get()/run()
+const { query } = require('../db/connection');
 const { authenticateToken } = require('../middleware/auth');
 
 const router = express.Router();
@@ -8,7 +9,7 @@ const router = express.Router();
 // GET /api/users/me - Get current user profile
 router.get('/me', authenticateToken, async (req, res) => {
   try {
-    const user = await get('SELECT * FROM users WHERE id = ?', [req.user.id]);
+    const user = await query('SELECT * FROM users WHERE id = $1', [req.user.id]).then(r => r[0]);
     
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
@@ -18,36 +19,30 @@ router.get('/me', authenticateToken, async (req, res) => {
     delete user.password;
 
     // Get professions
-    const professions = await query(
-      `SELECT p.id, p.name, p.category, p.requires_licence, up.licence_number, up.state
+    const professions = await query(`SELECT p.id, p.name, p.category, p.requires_licence, up.licence_number, up.state
        FROM user_professions up
        JOIN professions p ON up.profession_id = p.id
-       WHERE up.user_id = ?`,
+       WHERE up.user_id = $1`,
       [req.user.id]
     );
 
     // Get job types
-    const jobTypes = await query(
-      `SELECT jt.id, jt.name, jt.category
+    const jobTypes = await query(`SELECT jt.id, jt.name, jt.category
        FROM user_job_types ujt
        JOIN job_types jt ON ujt.job_type_id = jt.id
-       WHERE ujt.user_id = ?`,
+       WHERE ujt.user_id = $1`,
       [req.user.id]
     );
 
     // Get qualifications
-    const qualifications = await query(
-      'SELECT * FROM user_qualifications WHERE user_id = ?',
+    const qualifications = await query('SELECT * FROM user_qualifications WHERE user_id = $1',
       [req.user.id]
     );
 
     // Get active subscription
-    const subscription = await get(
-      `SELECT * FROM subscriptions 
-       WHERE user_id = ? AND is_active = true 
-       ORDER BY created_at DESC LIMIT 1`,
-      [req.user.id]
-    );
+    const subscription = await query(`SELECT * FROM subscriptions 
+       WHERE user_id = $1 AND is_active = true 
+       ORDER BY created_at DESC LIMIT 1`, [req.user.id]).then(r => r[0]);
 
     res.json({
       ...user,
@@ -119,13 +114,12 @@ router.put('/me',
       const setClause = Object.keys(updates).map(key => `${key} = ?`).join(', ');
       const values = [...Object.values(updates), req.user.id];
 
-      await run(
-        `UPDATE users SET ${setClause}, updated_at = datetime('now') WHERE id = ?`,
+      await query(`UPDATE users SET ${setClause}, updated_at = datetime('now') WHERE id = $1`,
         values
       );
 
       // Get updated user
-      const user = await get('SELECT * FROM users WHERE id = ?', [req.user.id]);
+      const user = await query('SELECT * FROM users WHERE id = $1', [req.user.id]).then(r => r[0]);
       delete user.password;
 
       res.json({
@@ -185,26 +179,21 @@ router.post('/me/professions',
       const { profession_id, licence_number, state } = req.body;
 
       // Check if profession exists
-      const profession = await get('SELECT * FROM professions WHERE id = ?', [profession_id]);
+      const profession = await query('SELECT * FROM professions WHERE id = $1', [profession_id]).then(r => r[0]);
       if (!profession) {
         return res.status(404).json({ error: 'Profession not found' });
       }
 
       // Check if already added
-      const existing = await get(
-        'SELECT id FROM user_professions WHERE user_id = ? AND profession_id = ?',
-        [req.user.id, profession_id]
-      );
+      const existing = await query('SELECT id FROM user_professions WHERE user_id = $1 AND profession_id = $2', [req.user.id, profession_id]).then(r => r[0]);
       if (existing) {
         return res.status(409).json({ error: 'Profession already added' });
       }
 
       // Add profession
-      await run(
+      await query(
         `INSERT INTO user_professions (user_id, profession_id, licence_number, state, created_at)
-         VALUES (?, ?, ?, ?, datetime('now'))`,
-        [req.user.id, profession_id, licence_number || null, state || null]
-      );
+         VALUES ($2, $3, $4, $5, datetime('now'))`, [req.user.id, profession_id, licence_number || null, state || null]);
 
       res.status(201).json({ message: 'Profession added successfully' });
     } catch (error) {
@@ -217,10 +206,7 @@ router.post('/me/professions',
 // DELETE /api/users/me/professions/:id - Remove profession
 router.delete('/me/professions/:id', authenticateToken, async (req, res) => {
   try {
-    const result = await run(
-      'DELETE FROM user_professions WHERE id = ? AND user_id = ?',
-      [req.params.id, req.user.id]
-    );
+    const result = await query('DELETE FROM user_professions WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id]);
 
     if (result.changes === 0) {
       return res.status(404).json({ error: 'Profession not found' });
@@ -247,26 +233,20 @@ router.post('/me/job-types',
       const { job_type_id } = req.body;
 
       // Check if job type exists
-      const jobType = await get('SELECT * FROM job_types WHERE id = ?', [job_type_id]);
+      const jobType = await query('SELECT * FROM job_types WHERE id = $1', [job_type_id]).then(r => r[0]);
       if (!jobType) {
         return res.status(404).json({ error: 'Job type not found' });
       }
 
       // Check if already added
-      const existing = await get(
-        'SELECT id FROM user_job_types WHERE user_id = ? AND job_type_id = ?',
-        [req.user.id, job_type_id]
-      );
+      const existing = await query('SELECT id FROM user_job_types WHERE user_id = $1 AND job_type_id = $2', [req.user.id, job_type_id]).then(r => r[0]);
       if (existing) {
         return res.status(409).json({ error: 'Job type already added' });
       }
 
       // Add job type
-      await run(
-        `INSERT INTO user_job_types (user_id, job_type_id, created_at)
-         VALUES (?, ?, datetime('now'))`,
-        [req.user.id, job_type_id]
-      );
+      await query(`INSERT INTO user_job_types (user_id, job_type_id, created_at)
+         VALUES ($1, $2, datetime('now'))`, [req.user.id, job_type_id]);
 
       res.status(201).json({ message: 'Job type added successfully' });
     } catch (error) {
@@ -293,11 +273,8 @@ router.post('/me/qualifications',
 
       const { type, name, year_obtained } = req.body;
 
-      await run(
-        `INSERT INTO user_qualifications (user_id, type, name, year_obtained, created_at)
-         VALUES (?, ?, ?, ?, datetime('now'))`,
-        [req.user.id, type, name, year_obtained || null]
-      );
+      await query(`INSERT INTO user_qualifications (user_id, type, name, year_obtained, created_at)
+         VALUES ($1, $2, $3, $4, datetime('now'))`, [req.user.id, type, name, year_obtained || null]);
 
       res.status(201).json({ message: 'Qualification added successfully' });
     } catch (error) {
@@ -310,10 +287,7 @@ router.post('/me/qualifications',
 // DELETE /api/users/me/qualifications/:id - Remove qualification
 router.delete('/me/qualifications/:id', authenticateToken, async (req, res) => {
   try {
-    const result = await run(
-      'DELETE FROM user_qualifications WHERE id = ? AND user_id = ?',
-      [req.params.id, req.user.id]
-    );
+    const result = await query('DELETE FROM user_qualifications WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id]);
 
     if (result.changes === 0) {
       return res.status(404).json({ error: 'Qualification not found' });
@@ -343,7 +317,7 @@ router.post('/me/password',
       const { current_password, new_password } = req.body;
 
       // Get user with password
-      const user = await get('SELECT password FROM users WHERE id = ?', [req.user.id]);
+      const user = await query('SELECT password FROM users WHERE id = $1', [req.user.id]).then(r => r[0]);
       
       // Verify current password
       const bcrypt = require('bcryptjs');
@@ -357,10 +331,7 @@ router.post('/me/password',
       const newHash = await bcrypt.hash(new_password, 10);
 
       // Update password
-      await run(
-        'UPDATE users SET password = ?, updated_at = datetime(\'now\') WHERE id = ?',
-        [newHash, req.user.id]
-      );
+      await query('UPDATE users SET password = $1, updated_at = datetime(\'now\') WHERE id = $2', [newHash, req.user.id]);
 
       res.json({ message: 'Password changed successfully' });
     } catch (error) {
@@ -381,10 +352,7 @@ router.post('/me/photo',
         return res.status(400).json({ error: 'photo_url required' });
       }
 
-      await run(
-        'UPDATE users SET profile_photo = ?, updated_at = datetime(\'now\') WHERE id = ?',
-        [photo_url, req.user.id]
-      );
+      await query('UPDATE users SET profile_photo = $1, updated_at = datetime(\'now\') WHERE id = $2', [photo_url, req.user.id]);
 
       res.json({ 
         message: 'Profile photo updated successfully',
@@ -408,10 +376,7 @@ router.post('/me/logo',
         return res.status(400).json({ error: 'logo_url required' });
       }
 
-      await run(
-        'UPDATE users SET business_logo = ?, updated_at = datetime(\'now\') WHERE id = ?',
-        [logo_url, req.user.id]
-      );
+      await query('UPDATE users SET business_logo = $1, updated_at = datetime(\'now\') WHERE id = $2', [logo_url, req.user.id]);
 
       res.json({ 
         message: 'Business logo updated successfully',
@@ -447,7 +412,7 @@ router.post('/me/password',
       }
 
       // Get current user with password hash
-      const user = await get('SELECT * FROM users WHERE id = ?', [req.user.id]);
+      const user = await query('SELECT * FROM users WHERE id = $1', [req.user.id]).then(r => r[0]);
       if (!user) {
         return res.status(404).json({ error: 'User not found' });
       }
@@ -462,10 +427,7 @@ router.post('/me/password',
       const newHash = await bcrypt.hash(new_password, 10);
 
       // Update password
-      await run(
-        `UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE id = ?`,
-        [newHash, req.user.id]
-      );
+      await query(`UPDATE users SET password_hash = $1, updated_at = datetime('now') WHERE id = $2`, [newHash, req.user.id]);
 
       res.json({ message: 'Password changed successfully' });
     } catch (error) {
@@ -488,10 +450,7 @@ router.post('/me/photo', authenticateToken, async (req, res) => {
 
     // TODO: Download, resize to 150KB, upload to storage, get URL
     // For now, just store the URL directly
-    await run(
-      `UPDATE users SET profile_photo_url = ?, updated_at = datetime('now') WHERE id = ?`,
-      [photo_url, req.user.id]
-    );
+    await query(`UPDATE users SET profile_photo_url = $1, updated_at = datetime('now') WHERE id = $2`, [photo_url, req.user.id]);
 
     res.json({ 
       message: 'Profile photo updated successfully',

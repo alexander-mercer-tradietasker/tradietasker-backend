@@ -36,7 +36,7 @@ router.get('/', async (req, res) => {
       WHERE u.referral_code IS NOT NULL
       GROUP BY u.id, u.name, u.email, u.referral_code, u.referral_credit_earned, u.created_at
       ORDER BY ${orderBy}
-      LIMIT ? OFFSET ?
+      LIMIT $1 OFFSET $2
     `, [parseInt(limit), offset]);
 
     const countResult = await query(
@@ -63,8 +63,7 @@ router.get('/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
 
-    const user = await query(
-      'SELECT id, name, email, referral_code, referral_credit_earned FROM users WHERE id = ?',
+    const user = await query('SELECT id, name, email, referral_code, referral_credit_earned FROM users WHERE id = $1',
       [userId]
     );
 
@@ -82,7 +81,7 @@ router.get('/:userId', async (req, res) => {
         r.created_at as referral_date
       FROM referrals r
       INNER JOIN users u ON r.referred_user_id = u.id
-      WHERE r.referrer_id = ?
+      WHERE r.referrer_id = $1
       ORDER BY r.created_at DESC
     `, [userId]);
 
@@ -138,7 +137,7 @@ router.put('/settings/current', async (req, res) => {
 
     sql += ' WHERE id = (SELECT id FROM referral_settings ORDER BY id DESC LIMIT 1)';
 
-    await run(sql, params);
+    await query(sql, params);
 
     const settings = await query(
       'SELECT * FROM referral_settings ORDER BY id DESC LIMIT 1'

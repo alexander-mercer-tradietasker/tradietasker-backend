@@ -115,7 +115,7 @@ router.get('/', async (req, res) => {
 // GET /api/admin/jobs/:id - Get single job details
 router.get('/:id', async (req, res) => {
   try {
-    const job = await get('SELECT * FROM jobs WHERE id = $1', [req.params.id]);
+    const job = await query('SELECT * FROM jobs WHERE id = $1', [req.params.id]).then(r => r[0]);
     
     if (!job) {
       return res.status(404).json({ error: 'Job not found' });

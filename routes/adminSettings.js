@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { query, get, run } = require('../db/connection');
+const { query } = require('../db/connection');
 const { authenticateToken, requireAdmin } = require('../middleware/auth');
 
 // GET /api/admin/settings - Get all admin settings
@@ -27,7 +27,7 @@ router.get('/', authenticateToken, requireAdmin, async (req, res) => {
 // GET /api/admin/settings/gst - Get GST setting
 router.get('/gst', authenticateToken, requireAdmin, async (req, res) => {
   try {
-    const setting = await get('SELECT * FROM admin_settings WHERE key = ?', ['gst_enabled']);
+    const setting = await query('SELECT * FROM admin_settings WHERE key = $1', ['gst_enabled']).then(r => r[0]);
     
     if (!setting) {
       return res.json({ gst_enabled: false });
@@ -52,12 +52,9 @@ router.put('/gst', authenticateToken, requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'enabled must be a boolean' });
     }
     
-    await run(
-      `INSERT INTO admin_settings (key, value, description, updated_at)
-       VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-       ON CONFLICT (key) DO UPDATE SET value = ?, updated_at = CURRENT_TIMESTAMP`,
-      ['gst_enabled', enabled.toString(), 'Enable GST (10%) on all invoices', enabled.toString()]
-    );
+    await query(`INSERT INTO admin_settings (key, value, description, updated_at)
+       VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
+       ON CONFLICT (key) DO UPDATE SET value = $4, updated_at = CURRENT_TIMESTAMP`, ['gst_enabled', enabled.toString(), 'Enable GST (10%) on all invoices', enabled.toString()]);
     
     res.json({
       message: 'GST setting updated successfully',
@@ -73,7 +70,7 @@ router.put('/gst', authenticateToken, requireAdmin, async (req, res) => {
 router.get('/:key', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const { key } = req.params;
-    const setting = await get('SELECT * FROM admin_settings WHERE key = ?', [key]);
+    const setting = await query('SELECT * FROM admin_settings WHERE key = $1', [key]).then(r => r[0]);
     
     if (!setting) {
       return res.status(404).json({ error: 'Setting not found' });
@@ -96,18 +93,12 @@ router.put('/:key', authenticateToken, requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'value is required' });
     }
     
-    const existing = await get('SELECT * FROM admin_settings WHERE key = ?', [key]);
+    const existing = await query('SELECT * FROM admin_settings WHERE key = $1', [key]).then(r => r[0]);
     
     if (existing) {
-      await run(
-        'UPDATE admin_settings SET value = ?, description = ?, updated_at = CURRENT_TIMESTAMP WHERE key = ?',
-        [value, description || existing.description, key]
-      );
+      await query('UPDATE admin_settings SET value = $1, description = $2, updated_at = CURRENT_TIMESTAMP WHERE key = $3', [value, description || existing.description, key]);
     } else {
-      await run(
-        'INSERT INTO admin_settings (key, value, description) VALUES (?, ?, ?)',
-        [key, value, description || '']
-      );
+      await query('INSERT INTO admin_settings (key, value, description) VALUES ($1, $2, $3)', [key, value, description || '']);
     }
     
     res.json({

@@ -1,6 +1,7 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
-const { query, get, run } = require('../db/connection');
+const db = require('../db/connection'); // Use db.query() instead of get()/run()
+const { query } = require('../db/connection');
 const { authenticateToken } = require('../middleware/auth');
 const nodemailer = require('nodemailer');
 
@@ -37,7 +38,7 @@ router.post('/',
       const reviewer_id = req.user.id;
 
       // Verify job exists and is completed
-      const job = await get('SELECT * FROM jobs WHERE id = ?', [job_id]);
+      const job = await query('SELECT * FROM jobs WHERE id = $1', [job_id]).then(r => r[0]);
       if (!job) {
         return res.status(404).json({ error: 'Job not found' });
       }
@@ -70,23 +71,17 @@ router.post('/',
       }
 
       // Check if review already exists
-      const existingReview = await get(
-        'SELECT id FROM reviews WHERE job_id = ? AND reviewer_id = ? AND reviewee_id = ?',
-        [job_id, reviewer_id, reviewee_id]
-      );
+      const existingReview = await query('SELECT id FROM reviews WHERE job_id = $1 AND reviewer_id = $2 AND reviewee_id = $3', [job_id, reviewer_id, reviewee_id]).then(r => r[0]);
 
       if (existingReview) {
         return res.status(409).json({ error: 'You have already reviewed this job' });
       }
 
       // Create review
-      const result = await run(
-        `INSERT INTO reviews (job_id, reviewer_id, reviewee_id, rating, review_text, created_at)
-         VALUES (?, ?, ?, ?, ?, datetime('now'))`,
-        [job_id, reviewer_id, reviewee_id, rating, review_text || null]
-      );
+      const result = await query(`INSERT INTO reviews (job_id, reviewer_id, reviewee_id, rating, review_text, created_at)
+         VALUES ($1, $2, $3, $4, $5, datetime('now'))`, [job_id, reviewer_id, reviewee_id, rating, review_text || null]);
 
-      const review = await get('SELECT * FROM reviews WHERE id = ?', [result.lastID]);
+      const review = await query('SELECT * FROM reviews WHERE id = $1', [result.lastID]).then(r => r[0]);
 
       res.status(201).json({
         message: 'Review submitted successfully',
@@ -104,8 +99,7 @@ router.get('/user/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
 
-    const reviews = await query(
-      `SELECT 
+    const reviews = await query(`SELECT 
         r.*,
         reviewer.name as reviewer_name,
         reviewer.role as reviewer_role,
@@ -114,7 +108,7 @@ router.get('/user/:userId', async (req, res) => {
       FROM reviews r
       LEFT JOIN users reviewer ON r.reviewer_id = reviewer.id
       LEFT JOIN jobs j ON r.job_id = j.id
-      WHERE r.reviewee_id = ?
+      WHERE r.reviewee_id = $1
       ORDER BY r.created_at DESC`,
       [userId]
     );
@@ -142,8 +136,7 @@ router.get('/job/:jobId', async (req, res) => {
   try {
     const { jobId } = req.params;
 
-    const reviews = await query(
-      `SELECT 
+    const reviews = await query(`SELECT 
         r.*,
         reviewer.name as reviewer_name,
         reviewer.role as reviewer_role,
@@ -152,7 +145,7 @@ router.get('/job/:jobId', async (req, res) => {
       FROM reviews r
       LEFT JOIN users reviewer ON r.reviewer_id = reviewer.id
       LEFT JOIN users reviewee ON r.reviewee_id = reviewee.id
-      WHERE r.job_id = ?
+      WHERE r.job_id = $1
       ORDER BY r.created_at DESC`,
       [jobId]
     );
@@ -202,8 +195,7 @@ router.post('/send-request/:jobId', authenticateToken, async (req, res) => {
     const { jobId } = req.params;
 
     // Get job details
-    const job = await get(
-      `SELECT 
+    const job = await query(`SELECT 
         j.*,
         customer.name as customer_name,
         tradie.name as tradie_name,
@@ -211,9 +203,7 @@ router.post('/send-request/:jobId', authenticateToken, async (req, res) => {
       FROM jobs j
       LEFT JOIN users customer ON j.user_id = customer.id
       LEFT JOIN users tradie ON j.assigned_tradie_id = tradie.id
-      WHERE j.id = ?`,
-      [jobId]
-    );
+      WHERE j.id = $1`, [jobId]).then(r => r[0]);
 
     if (!job) {
       return res.status(404).json({ error: 'Job not found' });

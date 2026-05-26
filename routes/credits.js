@@ -1,6 +1,7 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
-const { query, get, run } = require('../db/connection');
+const db = require('../db/connection'); // Use db.query() instead of get()/run()
+const { query } = require('../db/connection');
 const { authenticateToken } = require('../middleware/auth');
 
 const router = express.Router();
@@ -8,7 +9,7 @@ const router = express.Router();
 // GET /api/credits/balance
 router.get('/balance', authenticateToken, async (req, res) => {
   try {
-    const user = await get('SELECT credits FROM users WHERE id = ?', [req.user.id]);
+    const user = await query('SELECT credits FROM users WHERE id = $1', [req.user.id]).then(r => r[0]);
     const packages = await query('SELECT * FROM credit_packages WHERE enabled = true ORDER BY package_type, display_order');
     res.json({ credits: user.credits, packages });
   } catch (error) {
@@ -51,7 +52,7 @@ router.post('/purchase',
       }
 
       const { package_id } = req.body;
-      const pkg = await get('SELECT * FROM credit_packages WHERE id = ? AND enabled = true', [package_id]);
+      const pkg = await query('SELECT * FROM credit_packages WHERE id = $1 AND enabled = true', [package_id]).then(r => r[0]);
       
       if (!pkg) {
         return res.status(404).json({ error: 'Package not found' });
@@ -60,7 +61,7 @@ router.post('/purchase',
       // TODO: Integrate Stripe payment
       // For now, mock success
 
-      await run('UPDATE users SET credits = credits + ? WHERE id = ?', [pkg.credits, req.user.id]);
+      await query('UPDATE users SET credits = credits + $1 WHERE id = $2 RETURNING *', [pkg.credits, req.user.id]);
       res.json({ message: 'Credits purchased', credits_added: pkg.credits, package: pkg.name });
     } catch (error) {
       console.error('Purchase credits error:', error);

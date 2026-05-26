@@ -146,8 +146,7 @@ router.get('/users/me/profile', verifyTradie, async (req, res) => {
     const userId = req.user.id;
 
     // Get user details
-    const userResult = await query(
-      `SELECT 
+    const userResult = await query(`SELECT 
         id, name, email, phone, 
         business_name, business_logo, profile_photo,
         abn, business_address, business_phone, business_email,
@@ -155,7 +154,7 @@ router.get('/users/me/profile', verifyTradie, async (req, res) => {
         notification_prefs,
         created_at
       FROM users 
-      WHERE id = ?`,
+      WHERE id = $1`,
       [userId]
     );
 
@@ -166,28 +165,25 @@ router.get('/users/me/profile', verifyTradie, async (req, res) => {
     const user = userResult[0];
 
     // Get professions
-    const professions = await query(
-      `SELECT p.id, p.name, up.licence_number, up.state
+    const professions = await query(`SELECT p.id, p.name, up.licence_number, up.state
        FROM user_professions up
        JOIN professions p ON up.profession_id = p.id
-       WHERE up.user_id = ?`,
+       WHERE up.user_id = $1`,
       [userId]
     );
 
     // Get service areas (job types)
-    const serviceAreas = await query(
-      `SELECT jt.id, jt.name, jt.category
+    const serviceAreas = await query(`SELECT jt.id, jt.name, jt.category
        FROM user_job_types ujt
        JOIN job_types jt ON ujt.job_type_id = jt.id
-       WHERE ujt.user_id = ?`,
+       WHERE ujt.user_id = $1`,
       [userId]
     );
 
     // Get qualifications
-    const qualifications = await query(
-      `SELECT id, type, name, issuer, year_obtained, expiry_date, created_at
+    const qualifications = await query(`SELECT id, type, name, issuer, year_obtained, expiry_date, created_at
        FROM user_qualifications
-       WHERE user_id = ?
+       WHERE user_id = $1
        ORDER BY created_at DESC`,
       [userId]
     );
@@ -287,7 +283,7 @@ router.post('/users/me/password', verifyTradie, async (req, res) => {
     }
 
     // Get current password hash
-    const userResult = await query('SELECT password_hash FROM users WHERE id = ?', [userId]);
+    const userResult = await query('SELECT password_hash FROM users WHERE id = $1', [userId]);
     
     if (userResult.length === 0) {
       return res.status(404).json({ error: 'User not found' });
@@ -303,7 +299,7 @@ router.post('/users/me/password', verifyTradie, async (req, res) => {
     const newHash = await bcrypt.hash(newPassword, 10);
 
     // Update password
-    await query('UPDATE users SET password_hash = ? WHERE id = ?', [newHash, userId]);
+    await query('UPDATE users SET password_hash = $1 WHERE id = $2', [newHash, userId]);
 
     res.json({ message: 'Password changed successfully' });
   } catch (error) {
@@ -342,7 +338,7 @@ router.post('/users/me/photo', verifyTradie, upload.single('photo'), async (req,
 
     // Update database
     const photoUrl = `/uploads/profiles/${filename}`;
-    await query('UPDATE users SET profile_photo = ? WHERE id = ?', [photoUrl, userId]);
+    await query('UPDATE users SET profile_photo = $1 WHERE id = $2', [photoUrl, userId]);
 
     res.json({ 
       message: 'Profile photo uploaded successfully',
@@ -384,7 +380,7 @@ router.post('/users/me/logo', verifyTradie, upload.single('logo'), async (req, r
 
     // Update database
     const logoUrl = `/uploads/logos/${filename}`;
-    await query('UPDATE users SET business_logo = ? WHERE id = ?', [logoUrl, userId]);
+    await query('UPDATE users SET business_logo = $1 WHERE id = $2', [logoUrl, userId]);
 
     res.json({ 
       message: 'Business logo uploaded successfully',
@@ -443,8 +439,7 @@ router.delete('/users/me/qualifications/:id', verifyTradie, async (req, res) => 
     const userId = req.user.id;
     const qualificationId = req.params.id;
 
-    const result = await query(
-      'DELETE FROM user_qualifications WHERE id = ? AND user_id = ?',
+    const result = await query('DELETE FROM user_qualifications WHERE id = $1 AND user_id = $2',
       [qualificationId, userId]
     );
 
@@ -467,8 +462,7 @@ router.get('/profile-status', verifyTradie, async (req, res) => {
   try {
     const userId = req.user.id;
     
-    const user = await query(
-      'SELECT profile_completed FROM users WHERE id = ?',
+    const user = await query('SELECT profile_completed FROM users WHERE id = $1',
       [userId]
     );
     
@@ -607,9 +601,8 @@ router.post('/complete-profile', verifyTradie, async (req, res) => {
       // Add job types
       if (selected_job_types && Array.isArray(selected_job_types)) {
         for (const jobTypeId of selected_job_types) {
-          await query(
-            `INSERT INTO user_job_types (user_id, job_type_id)
-             VALUES (?, ?)
+          await query(`INSERT INTO user_job_types (user_id, job_type_id)
+             VALUES ($1, $2)
              ON CONFLICT (user_id, job_type_id) DO NOTHING`,
             [userId, jobTypeId]
           );
@@ -633,8 +626,7 @@ router.post('/complete-profile', verifyTradie, async (req, res) => {
       await query('COMMIT');
 
       // Get updated user
-      const updatedUser = await query(
-        'SELECT id, email, name, phone, role, tier, credits, profile_completed FROM users WHERE id = ?',
+      const updatedUser = await query('SELECT id, email, name, phone, role, tier, credits, profile_completed FROM users WHERE id = $1',
         [userId]
       );
 

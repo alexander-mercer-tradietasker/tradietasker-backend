@@ -86,7 +86,7 @@ router.get('/:id', async (req, res) => {
         u.tier as user_tier
       FROM subscriptions s
       LEFT JOIN users u ON s.user_id = u.id
-      WHERE s.id = ?
+      WHERE s.id = $1
     `, [id]);
 
     if (subscription.length === 0) {
@@ -106,8 +106,7 @@ router.put('/:id/cancel', async (req, res) => {
     const { id } = req.params;
     const { reason } = req.body;
 
-    const subscription = await query(
-      'SELECT * FROM subscriptions WHERE id = ?',
+    const subscription = await query('SELECT * FROM subscriptions WHERE id = $1',
       [id]
     );
 
@@ -119,10 +118,7 @@ router.put('/:id/cancel', async (req, res) => {
       return res.status(400).json({ error: 'Subscription is already canceled' });
     }
 
-    await run(
-      'UPDATE subscriptions SET status = ?, canceled_at = CURRENT_TIMESTAMP, cancellation_reason = ? WHERE id = ?',
-      ['canceled', reason || 'Canceled by admin', id]
-    );
+    await query('UPDATE subscriptions SET status = $1, canceled_at = CURRENT_TIMESTAMP, cancellation_reason = $2 WHERE id = $3', ['canceled', reason || 'Canceled by admin', id]);
 
     res.json({ message: 'Subscription canceled successfully' });
   } catch (error) {

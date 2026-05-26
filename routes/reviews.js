@@ -1,6 +1,7 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
-const { query, get, run } = require('../db/connection');
+const db = require('../db/connection'); // Use db.query() instead of get()/run()
+const { query } = require('../db/connection');
 const { authenticateToken } = require('../middleware/auth');
 
 const router = express.Router();
@@ -24,23 +25,20 @@ router.post('/',
       const { job_id, reviewee_id, stars, comment } = req.body;
 
       // Verify job exists
-      const job = await get('SELECT * FROM jobs WHERE id = ?', [job_id]);
+      const job = await query('SELECT * FROM jobs WHERE id = $1', [job_id]).then(r => r[0]);
       if (!job) {
         return res.status(404).json({ error: 'Job not found' });
       }
 
       // Verify reviewee exists
-      const reviewee = await get('SELECT id FROM users WHERE id = ?', [reviewee_id]);
+      const reviewee = await query('SELECT id FROM users WHERE id = $1', [reviewee_id]).then(r => r[0]);
       if (!reviewee) {
         return res.status(404).json({ error: 'Reviewee not found' });
       }
 
       // Check if already reviewed
-      const existing = await get(
-        `SELECT id FROM reviews 
-         WHERE job_id = ? AND reviewer_id = ? AND reviewee_id = ?`,
-        [job_id, req.user.id, reviewee_id]
-      );
+      const existing = await query(`SELECT id FROM reviews 
+         WHERE job_id = $1 AND reviewer_id = $2 AND reviewee_id = $3`, [job_id, req.user.id, reviewee_id]).then(r => r[0]);
       if (existing) {
         return res.status(409).json({ error: 'Review already submitted for this job/user combination' });
       }
@@ -54,15 +52,12 @@ router.post('/',
       }
 
       // Create review
-      await run(
-        `INSERT INTO reviews (job_id, reviewer_id, reviewee_id, stars, comment, created_at)
-         VALUES (?, ?, ?, ?, ?, datetime('now'))`,
-        [job_id, req.user.id, reviewee_id, stars, comment || null]
-      );
+      await query(`INSERT INTO reviews (job_id, reviewer_id, reviewee_id, stars, comment, created_at)
+         VALUES ($1, $2, $3, $4, $5, datetime('now'))`, [job_id, req.user.id, reviewee_id, stars, comment || null]);
 
       // Award credits to both reviewer and reviewee
-      await run('UPDATE users SET credits = credits + 1 WHERE id = ?', [req.user.id]);
-      await run('UPDATE users SET credits = credits + 1 WHERE id = ?', [reviewee_id]);
+      await query('UPDATE users SET credits = credits + 1 WHERE id = $1 RETURNING *', [req.user.id]);
+      await query('UPDATE users SET credits = credits + 1 WHERE id = $1 RETURNING *', [reviewee_id]);
 
       res.status(201).json({ 
         message: 'Review submitted successfully',
@@ -79,15 +74,14 @@ router.post('/',
 // GET /api/reviews/job/:jobId - Get reviews for a job
 router.get('/job/:jobId', async (req, res) => {
   try {
-    const reviews = await query(
-      `SELECT 
+    const reviews = await query(`SELECT 
         r.*,
         reviewer.name as reviewer_name,
         reviewee.name as reviewee_name
       FROM reviews r
       JOIN users reviewer ON r.reviewer_id = reviewer.id
       JOIN users reviewee ON r.reviewee_id = reviewee.id
-      WHERE r.job_id = ?
+      WHERE r.job_id = $1
       ORDER BY r.created_at DESC`,
       [req.params.jobId]
     );
@@ -102,22 +96,20 @@ router.get('/job/:jobId', async (req, res) => {
 // GET /api/reviews/user/:userId - Get reviews for a user
 router.get('/user/:userId', async (req, res) => {
   try {
-    const reviews = await query(
-      `SELECT 
+    const reviews = await query(`SELECT 
         r.*,
         reviewer.name as reviewer_name,
         j.title as job_title
       FROM reviews r
       JOIN users reviewer ON r.reviewer_id = reviewer.id
       JOIN jobs j ON r.job_id = j.id
-      WHERE r.reviewee_id = ?
+      WHERE r.reviewee_id = $1
       ORDER BY r.created_at DESC`,
       [req.params.userId]
     );
 
     // Calculate rating stats
-    const stats = await get(
-      `SELECT 
+    const stats = await query(`SELECT 
         COUNT(*) as review_count,
         AVG(stars) as avg_rating,
         SUM(CASE WHEN stars = 5 THEN 1 ELSE 0 END) as five_star,
@@ -126,9 +118,7 @@ router.get('/user/:userId', async (req, res) => {
         SUM(CASE WHEN stars = 2 THEN 1 ELSE 0 END) as two_star,
         SUM(CASE WHEN stars = 1 THEN 1 ELSE 0 END) as one_star
       FROM reviews
-      WHERE reviewee_id = ?`,
-      [req.params.userId]
-    );
+      WHERE reviewee_id = $1`, [req.params.userId]).then(r => r[0]);
 
     res.json({ 
       reviews,

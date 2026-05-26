@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { query, get, run } = require('../db/connection');
+const { query } = require('../db/connection');
 const { v4: uuidv4 } = require('uuid');
 
 // Middleware to check authentication
@@ -27,17 +27,17 @@ router.get('/threads', requireAuth, async (req, res) => {
         m.body as last_message,
         m.created_at as last_message_at,
         CASE 
-          WHEN m.sender_id = ? THEN m.recipient_id 
+          WHEN m.sender_id = $1 THEN m.recipient_id 
           ELSE m.sender_id 
         END as other_user_id,
         CASE 
-          WHEN m.sender_id = ? THEN recipient.name 
+          WHEN m.sender_id = $2 THEN recipient.name 
           ELSE sender.name 
         END as other_user_name,
         (SELECT COUNT(*) 
          FROM messages 
          WHERE thread_id = m.thread_id 
-           AND recipient_id = ? 
+           AND recipient_id = $3 
            AND read = false) as unread_count
       FROM messages m
       LEFT JOIN users sender ON m.sender_id = sender.id
@@ -45,7 +45,7 @@ router.get('/threads', requireAuth, async (req, res) => {
       WHERE m.id IN (
         SELECT MAX(id) 
         FROM messages 
-        WHERE sender_id = ? OR recipient_id = ?
+        WHERE sender_id = $4 OR recipient_id = $5
         GROUP BY thread_id
       )
       ORDER BY m.created_at DESC
@@ -68,7 +68,7 @@ router.get('/thread/:threadId', requireAuth, async (req, res) => {
     const userMessages = await query(`
       SELECT COUNT(*) as count
       FROM messages
-      WHERE thread_id = ? AND (sender_id = ? OR recipient_id = ?)
+      WHERE thread_id = $1 AND (sender_id = $2 OR recipient_id = $3)
     `, [threadId, userId, userId]);
 
     if (userMessages[0].count === 0) {
@@ -92,7 +92,7 @@ router.get('/thread/:threadId', requireAuth, async (req, res) => {
       FROM messages m
       LEFT JOIN users sender ON m.sender_id = sender.id
       LEFT JOIN users recipient ON m.recipient_id = recipient.id
-      WHERE m.thread_id = ?
+      WHERE m.thread_id = $1
       ORDER BY m.created_at ASC
     `, [threadId]);
 
@@ -115,13 +115,13 @@ router.post('/send', requireAuth, async (req, res) => {
     }
 
     // Verify recipient exists
-    const recipient = await get('SELECT id, name, email FROM users WHERE id = ?', [recipient_id]);
+    const recipient = await query('SELECT id, name, email FROM users WHERE id = $1', [recipient_id]).then(r => r[0]);
     if (!recipient) {
       return res.status(404).json({ error: 'Recipient not found' });
     }
 
     // Verify sender exists
-    const sender = await get('SELECT id, name, email FROM users WHERE id = ?', [sender_id]);
+    const sender = await query('SELECT id, name, email FROM users WHERE id = $1', [sender_id]).then(r => r[0]);
     if (!sender) {
       return res.status(404).json({ error: 'Sender not found' });
     }
@@ -130,9 +130,9 @@ router.post('/send', requireAuth, async (req, res) => {
     const finalThreadId = thread_id || uuidv4();
 
     // Insert message
-    const result = await run(`
+    const result = await query(`
       INSERT INTO messages (sender_id, recipient_id, subject, body, thread_id, read, created_at)
-      VALUES (?, ?, ?, ?, ?, 0, datetime('now'))
+      VALUES ($1, $2, $3, $4, $5, 0, datetime('now'))
     `, [sender_id, recipient_id, subject || '', body, finalThreadId]);
 
     const messageId = result.lastID;
@@ -158,10 +158,10 @@ router.put('/thread/:threadId/read', requireAuth, async (req, res) => {
     const userId = req.userId;
 
     // Mark all messages in thread as read for current user (as recipient)
-    await run(`
+    await query(`
       UPDATE messages
       SET read = true
-      WHERE thread_id = ? AND recipient_id = ? AND read = false
+      WHERE thread_id = $1 AND recipient_id = $2 AND read = false
     `, [threadId, userId]);
 
     res.json({ success: true });
@@ -176,11 +176,11 @@ router.get('/unread-count', requireAuth, async (req, res) => {
   try {
     const userId = req.userId;
 
-    const result = await get(`
+    const result = await query(`
       SELECT COUNT(*) as count
       FROM messages
-      WHERE recipient_id = ? AND read = false
-    `, [userId]);
+      WHERE recipient_id = $1 AND read = false
+    `, [userId]).then(r => r[0]);
 
     res.json({ unread_count: result.count || 0 });
   } catch (error) {

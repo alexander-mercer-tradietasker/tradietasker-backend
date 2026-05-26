@@ -1,6 +1,7 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
-const { query, get, run } = require('../db/connection');
+const db = require('../db/connection'); // Use db.query() instead of get()/run()
+const { query } = require('../db/connection');
 const { authenticateToken } = require('../middleware/auth');
 
 const router = express.Router();
@@ -101,12 +102,9 @@ router.get('/tiers', async (req, res) => {
 // GET /api/subscriptions/my-subscription - Get current subscription
 router.get('/my-subscription', authenticateToken, async (req, res) => {
   try {
-    const subscription = await get(
-      `SELECT * FROM subscriptions 
-       WHERE user_id = ? AND is_active = true 
-       ORDER BY created_at DESC LIMIT 1`,
-      [req.user.id]
-    );
+    const subscription = await query(`SELECT * FROM subscriptions 
+       WHERE user_id = $1 AND is_active = true 
+       ORDER BY created_at DESC LIMIT 1`, [req.user.id]).then(r => r[0]);
 
     res.json({ 
       subscription: subscription || null,
@@ -133,7 +131,7 @@ router.post('/subscribe',
       const { tier } = req.body;
       
       // Fetch tier config from database
-      const tierConfig = await get('SELECT * FROM tiers WHERE tier_name = ?', [tier]);
+      const tierConfig = await query('SELECT * FROM tiers WHERE tier_name = $1', [tier]).then(r => r[0]);
       
       if (!tierConfig) {
         return res.status(400).json({ error: 'Invalid tier' });
@@ -169,23 +167,18 @@ router.post('/subscribe',
       const initialBonus = tierConfig.initial_purchase_bonus_credits || 0;
 
       // Deactivate old subscriptions
-      await run(
-        'UPDATE subscriptions SET is_active = false WHERE user_id = ?',
-        [req.user.id]
-      );
+      await query('UPDATE subscriptions SET is_active = false WHERE user_id = $1', [req.user.id]);
 
       // Calculate renewal date (7 days from now)
       const renewsAt = new Date();
       renewsAt.setDate(renewsAt.getDate() + 7);
 
       // Create new subscription
-      await run(
-        `INSERT INTO subscriptions (
+      await query(`INSERT INTO subscriptions (
           user_id, tier, credits_included, credits_remaining,
           price_per_week, discount_percent, early_access_hours,
           starts_at, renews_at, is_active, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, true, CURRENT_TIMESTAMP)`,
-        [
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, $8, true, CURRENT_TIMESTAMP)`, [
           req.user.id,
           tier,
           totalCredits,
@@ -194,15 +187,11 @@ router.post('/subscribe',
           tierDiscount.enabled ? tierDiscount.percent : 0,
           Math.floor((tierConfig.job_view_delay_minutes || 0) / 60),
           renewsAt.toISOString()
-        ]
-      );
+        ]);
 
       // Update user tier and add credits (including initial bonus)
       const creditsToAdd = totalCredits + initialBonus;
-      await run(
-        'UPDATE users SET tier = ?, credits = credits + ? WHERE id = ?',
-        [tier, creditsToAdd, req.user.id]
-      );
+      await query('UPDATE users SET tier = $1, credits = credits + $2 WHERE id = $3', [tier, creditsToAdd, req.user.id]);
 
       res.json({ 
         message: 'Subscription created successfully',
@@ -233,25 +222,22 @@ router.put('/change-tier',
       const { tier } = req.body;
 
       // Get current subscription
-      const currentSub = await get(
-        `SELECT * FROM subscriptions 
-         WHERE user_id = ? AND is_active = true 
-         ORDER BY created_at DESC LIMIT 1`,
-        [req.user.id]
-      );
+      const currentSub = await query(`SELECT * FROM subscriptions 
+         WHERE user_id = $1 AND is_active = true 
+         ORDER BY created_at DESC LIMIT 1`, [req.user.id]).then(r => r[0]);
 
       if (tier === 'basic' || tier === 'free') {
         // Cancel subscription
         if (currentSub) {
-          await run('UPDATE subscriptions SET is_active = false WHERE id = ?', [currentSub.id]);
+          await query('UPDATE subscriptions SET is_active = false WHERE id = $1 RETURNING *', [currentSub.id]);
         }
-        await run('UPDATE users SET tier = ? WHERE id = ?', ['basic', req.user.id]);
+        await query('UPDATE users SET tier = $1 WHERE id = $2 RETURNING *', ['basic', req.user.id]);
         
         return res.json({ message: 'Subscription cancelled' });
       }
       
       // Fetch tier config from database
-      const tierConfig = await get('SELECT * FROM tiers WHERE tier_name = ?', [tier]);
+      const tierConfig = await query('SELECT * FROM tiers WHERE tier_name = $1', [tier]).then(r => r[0]);
       
       if (!tierConfig) {
         return res.status(400).json({ error: 'Invalid tier' });
@@ -282,20 +268,18 @@ router.put('/change-tier',
 
       // Deactivate old subscription
       if (currentSub) {
-        await run('UPDATE subscriptions SET is_active = false WHERE id = ?', [currentSub.id]);
+        await query('UPDATE subscriptions SET is_active = false WHERE id = $1 RETURNING *', [currentSub.id]);
       }
 
       // Create new subscription
       const renewsAt = new Date();
       renewsAt.setDate(renewsAt.getDate() + 7);
 
-      await run(
-        `INSERT INTO subscriptions (
+      await query(`INSERT INTO subscriptions (
           user_id, tier, credits_included, credits_remaining,
           price_per_week, discount_percent, early_access_hours,
           starts_at, renews_at, is_active, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, true, CURRENT_TIMESTAMP)`,
-        [
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, $8, true, CURRENT_TIMESTAMP)`, [
           req.user.id,
           tier,
           totalCredits,
@@ -304,14 +288,10 @@ router.put('/change-tier',
           tierDiscount.enabled ? tierDiscount.percent : 0,
           Math.floor((tierConfig.job_view_delay_minutes || 0) / 60),
           renewsAt.toISOString()
-        ]
-      );
+        ]);
 
       // Update user tier and add credits
-      await run(
-        'UPDATE users SET tier = ?, credits = credits + ? WHERE id = ?',
-        [tier, totalCredits, req.user.id]
-      );
+      await query('UPDATE users SET tier = $1, credits = credits + $2 WHERE id = $3', [tier, totalCredits, req.user.id]);
 
       res.json({ 
         message: 'Tier changed successfully',
@@ -329,15 +309,9 @@ router.put('/change-tier',
 // POST /api/subscriptions/cancel - Cancel subscription
 router.post('/cancel', authenticateToken, async (req, res) => {
   try {
-    await run(
-      'UPDATE subscriptions SET is_active = false WHERE user_id = ?',
-      [req.user.id]
-    );
+    await query('UPDATE subscriptions SET is_active = false WHERE user_id = $1', [req.user.id]);
 
-    await run(
-      'UPDATE users SET tier = ? WHERE id = ?',
-      ['basic', req.user.id]
-    );
+    await query('UPDATE users SET tier = $1 WHERE id = $2', ['basic', req.user.id]);
 
     res.json({ message: 'Subscription cancelled successfully' });
   } catch (error) {

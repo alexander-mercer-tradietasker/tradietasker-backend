@@ -13,8 +13,7 @@ function generateReferralCode() {
 // GET /api/referrals/my-code - Get current user's referral code
 router.get('/my-code', authenticateToken, async (req, res) => {
   try {
-    const user = await query(
-      'SELECT referral_code, referral_credit_earned FROM users WHERE id = ?',
+    const user = await query('SELECT referral_code, referral_credit_earned FROM users WHERE id = $1',
       [req.user.id]
     );
 
@@ -29,8 +28,7 @@ router.get('/my-code', authenticateToken, async (req, res) => {
       
       // Ensure unique code
       while (attempts < 10) {
-        const existing = await query(
-          'SELECT id FROM users WHERE referral_code = ?',
+        const existing = await query('SELECT id FROM users WHERE referral_code = $1',
           [code]
         );
         
@@ -42,10 +40,7 @@ router.get('/my-code', authenticateToken, async (req, res) => {
         attempts++;
       }
 
-      await run(
-        'UPDATE users SET referral_code = ? WHERE id = ?',
-        [code, req.user.id]
-      );
+      await query('UPDATE users SET referral_code = $1 WHERE id = $2', [code, req.user.id]);
 
       user[0].referral_code = code;
     }
@@ -56,7 +51,7 @@ router.get('/my-code', authenticateToken, async (req, res) => {
         COUNT(*) as total_referrals,
         SUM(credit_awarded) as total_credits_earned
       FROM referrals
-      WHERE referrer_id = ?
+      WHERE referrer_id = $1
     `, [req.user.id]);
 
     res.json({ 
@@ -81,7 +76,7 @@ router.get('/my-referrals', authenticateToken, async (req, res) => {
         r.created_at as referral_date
       FROM referrals r
       INNER JOIN users u ON r.referred_user_id = u.id
-      WHERE r.referrer_id = ?
+      WHERE r.referrer_id = $1
       ORDER BY r.created_at DESC
     `, [req.user.id]);
 
@@ -111,8 +106,7 @@ router.post('/apply', async (req, res) => {
     }
 
     // Find the referrer by code
-    const referrer = await query(
-      'SELECT id FROM users WHERE referral_code = ?',
+    const referrer = await query('SELECT id FROM users WHERE referral_code = $1',
       [referralCode.toUpperCase()]
     );
 
@@ -128,8 +122,7 @@ router.post('/apply', async (req, res) => {
     }
 
     // Check if this user was already referred
-    const existingReferral = await query(
-      'SELECT id FROM users WHERE id = ? AND referred_by IS NOT NULL',
+    const existingReferral = await query('SELECT id FROM users WHERE id = $1 AND referred_by IS NOT NULL',
       [userId]
     );
 
@@ -140,21 +133,12 @@ router.post('/apply', async (req, res) => {
     const creditAmount = settings[0].credit_per_referral;
 
     // Start transaction: update user, create referral record, award credits
-    await run(
-      'UPDATE users SET referred_by = ? WHERE id = ?',
-      [referrerId, userId]
-    );
+    await query('UPDATE users SET referred_by = $1 WHERE id = $2', [referrerId, userId]);
 
-    await run(
-      'INSERT INTO referrals (referrer_id, referred_user_id, credit_awarded) VALUES (?, ?, ?)',
-      [referrerId, userId, creditAmount]
-    );
+    await query('INSERT INTO referrals (referrer_id, referred_user_id, credit_awarded) VALUES ($1, $2, $3)', [referrerId, userId, creditAmount]);
 
     // Award credits to referrer
-    await run(
-      'UPDATE users SET credits = credits + ?, referral_credit_earned = referral_credit_earned + ? WHERE id = ?',
-      [creditAmount, creditAmount, referrerId]
-    );
+    await query('UPDATE users SET credits = credits + $1, referral_credit_earned = referral_credit_earned + $2 WHERE id = $3', [creditAmount, creditAmount, referrerId]);
 
     res.json({ 
       message: 'Referral applied successfully',

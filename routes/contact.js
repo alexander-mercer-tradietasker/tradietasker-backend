@@ -1,6 +1,7 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
-const { query, get, run } = require('../db/connection');
+const db = require('../db/connection'); // Use db.query() instead of get()/run()
+const { query } = require('../db/connection');
 const { authenticateToken } = require('../middleware/auth');
 
 const router = express.Router();
@@ -28,17 +29,14 @@ router.post('/send-profile',
       const { job_id } = req.body;
 
       // Verify job exists
-      const job = await get('SELECT * FROM jobs WHERE id = ?', [job_id]);
+      const job = await query('SELECT * FROM jobs WHERE id = $1', [job_id]).then(r => r[0]);
       if (!job) {
         return res.status(404).json({ error: 'Job not found' });
       }
 
       // Check if already sent
-      const existing = await get(
-        `SELECT id FROM contact_transactions 
-         WHERE from_user_id = ? AND job_id = ? AND type = 'send-profile'`,
-        [req.user.id, job_id]
-      );
+      const existing = await query(`SELECT id FROM contact_transactions 
+         WHERE from_user_id = $1 AND job_id = $2 AND type = 'send-profile'`, [req.user.id, job_id]).then(r => r[0]);
       if (existing) {
         return res.status(409).json({ error: 'Profile already sent for this job' });
       }
@@ -53,15 +51,14 @@ router.post('/send-profile',
       }
 
       // Deduct credits
-      await run(
-        'UPDATE users SET credits = credits - ? WHERE id = ?',
+      await query('UPDATE users SET credits = credits - $1 WHERE id = $2',
         [CONTACT_COSTS['send-profile'], req.user.id]
       );
 
       // Create transaction
-      await run(
+      await query(
         `INSERT INTO contact_transactions (from_user_id, to_user_id, job_id, type, credits_used, created_at)
-         VALUES (?, ?, ?, 'send-profile', ?, datetime('now'))`,
+         VALUES ($3, $4, $5, 'send-profile', $6, datetime('now'))`,
         [req.user.id, job.user_id, job_id, CONTACT_COSTS['send-profile']]
       );
 
@@ -91,23 +88,17 @@ router.post('/full-contact',
       const { job_id } = req.body;
 
       // Verify job exists
-      const job = await get(
-        `SELECT j.*, u.email as poster_email, u.phone as poster_phone
+      const job = await query(`SELECT j.*, u.email as poster_email, u.phone as poster_phone
          FROM jobs j
          LEFT JOIN users u ON j.user_id = u.id
-         WHERE j.id = ?`,
-        [job_id]
-      );
+         WHERE j.id = $1`, [job_id]).then(r => r[0]);
       if (!job) {
         return res.status(404).json({ error: 'Job not found' });
       }
 
       // Check if already purchased
-      const existing = await get(
-        `SELECT id FROM contact_transactions 
-         WHERE from_user_id = ? AND job_id = ? AND type = 'full-contact'`,
-        [req.user.id, job_id]
-      );
+      const existing = await query(`SELECT id FROM contact_transactions 
+         WHERE from_user_id = $1 AND job_id = $2 AND type = 'full-contact'`, [req.user.id, job_id]).then(r => r[0]);
       if (existing) {
         return res.status(409).json({ error: 'Full contact already purchased for this job' });
       }
@@ -122,15 +113,15 @@ router.post('/full-contact',
       }
 
       // Deduct credits
-      await run(
-        'UPDATE users SET credits = credits - ? WHERE id = ?',
+      await query(
+        'UPDATE users SET credits = credits - $7 WHERE id = $8',
         [CONTACT_COSTS['full-contact'], req.user.id]
       );
 
       // Create transaction
-      await run(
+      await query(
         `INSERT INTO contact_transactions (from_user_id, to_user_id, job_id, type, credits_used, created_at)
-         VALUES (?, ?, ?, 'full-contact', ?, datetime('now'))`,
+         VALUES ($9, $10, $11, 'full-contact', $12, datetime('now'))`,
         [req.user.id, job.user_id, job_id, CONTACT_COSTS['full-contact']]
       );
 
@@ -177,26 +168,20 @@ router.post('/unlock-tradie',
       const { tasker_id, job_id } = req.body;
 
       // Verify tasker exists
-      const tasker = await get(
-        `SELECT u.*, 
+      const tasker = await query(`SELECT u.*, 
           GROUP_CONCAT(DISTINCT p.name) as professions
          FROM users u
          LEFT JOIN user_professions up ON u.id = up.user_id
          LEFT JOIN professions p ON up.profession_id = p.id
-         WHERE u.id = ?
-         GROUP BY u.id`,
-        [tasker_id]
-      );
+         WHERE u.id = $1
+         GROUP BY u.id`, [tasker_id]).then(r => r[0]);
       if (!tasker) {
         return res.status(404).json({ error: 'Tasker not found' });
       }
 
       // Check if already unlocked
-      const existing = await get(
-        `SELECT id FROM contact_transactions 
-         WHERE from_user_id = ? AND to_user_id = ? AND job_id = ? AND type = 'poster-unlock-tradie'`,
-        [req.user.id, tasker_id, job_id]
-      );
+      const existing = await query(`SELECT id FROM contact_transactions 
+         WHERE from_user_id = $1 AND to_user_id = $2 AND job_id = $3 AND type = 'poster-unlock-tradie'`, [req.user.id, tasker_id, job_id]).then(r => r[0]);
       if (existing) {
         return res.status(409).json({ error: 'Tradie already unlocked' });
       }
@@ -211,15 +196,15 @@ router.post('/unlock-tradie',
       }
 
       // Deduct credits
-      await run(
-        'UPDATE users SET credits = credits - ? WHERE id = ?',
+      await query(
+        'UPDATE users SET credits = credits - $13 WHERE id = $14',
         [CONTACT_COSTS['poster-unlock-tradie'], req.user.id]
       );
 
       // Create transaction
-      await run(
+      await query(
         `INSERT INTO contact_transactions (from_user_id, to_user_id, job_id, type, credits_used, created_at)
-         VALUES (?, ?, ?, 'poster-unlock-tradie', ?, datetime('now'))`,
+         VALUES ($15, $16, $17, 'poster-unlock-tradie', $18, datetime('now'))`,
         [req.user.id, tasker_id, job_id, CONTACT_COSTS['poster-unlock-tradie']]
       );
 
@@ -253,7 +238,7 @@ router.post('/3-tradie-pack',
       const { job_id } = req.body;
 
       // Verify job exists and is owned by user
-      const job = await get('SELECT * FROM jobs WHERE id = ?', [job_id]);
+      const job = await query('SELECT * FROM jobs WHERE id = $1', [job_id]).then(r => r[0]);
       if (!job) {
         return res.status(404).json({ error: 'Job not found' });
       }
@@ -262,11 +247,8 @@ router.post('/3-tradie-pack',
       }
 
       // Check if package already exists for this job
-      const existing = await get(
-        `SELECT id FROM poster_packages 
-         WHERE user_id = ? AND job_id = ? AND type = '3-tradie' AND is_active = true`,
-        [req.user.id, job_id]
-      );
+      const existing = await query(`SELECT id FROM poster_packages 
+         WHERE user_id = $1 AND job_id = $2 AND type = '3-tradie' AND is_active = true`, [req.user.id, job_id]).then(r => r[0]);
       if (existing) {
         return res.status(409).json({ error: '3-tradie pack already active for this job' });
       }
@@ -278,11 +260,8 @@ router.post('/3-tradie-pack',
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + 30); // 30 days expiry
 
-      await run(
-        `INSERT INTO poster_packages (user_id, job_id, type, tradies_unlocked, tradies_limit, expires_at, is_active, created_at)
-         VALUES (?, ?, '3-tradie', 0, 3, ?, 1, datetime('now'))`,
-        [req.user.id, job_id, expiresAt.toISOString()]
-      );
+      await query(`INSERT INTO poster_packages (user_id, job_id, type, tradies_unlocked, tradies_limit, expires_at, is_active, created_at)
+         VALUES ($1, $2, '3-tradie', 0, 3, $3, 1, datetime('now'))`, [req.user.id, job_id, expiresAt.toISOString()]);
 
       res.status(201).json({ 
         message: '3-Tradie Unlock Starter Pack purchased successfully',
@@ -311,7 +290,7 @@ router.post('/20-tradie-pack',
       const { job_id } = req.body;
 
       // Verify job exists and is owned by user
-      const job = await get('SELECT * FROM jobs WHERE id = ?', [job_id]);
+      const job = await query('SELECT * FROM jobs WHERE id = $1', [job_id]).then(r => r[0]);
       if (!job) {
         return res.status(404).json({ error: 'Job not found' });
       }
@@ -320,11 +299,8 @@ router.post('/20-tradie-pack',
       }
 
       // Check if package already exists for this job
-      const existing = await get(
-        `SELECT id FROM poster_packages 
-         WHERE user_id = ? AND job_id = ? AND type = '20-tradie' AND is_active = true`,
-        [req.user.id, job_id]
-      );
+      const existing = await query(`SELECT id FROM poster_packages 
+         WHERE user_id = $1 AND job_id = $2 AND type = '20-tradie' AND is_active = true`, [req.user.id, job_id]).then(r => r[0]);
       if (existing) {
         return res.status(409).json({ error: '20-tradie pack already active for this job' });
       }
@@ -336,11 +312,8 @@ router.post('/20-tradie-pack',
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + 30); // 30 days expiry
 
-      await run(
-        `INSERT INTO poster_packages (user_id, job_id, type, tradies_unlocked, tradies_limit, expires_at, is_active, created_at)
-         VALUES (?, ?, '20-tradie', 0, 20, ?, 1, datetime('now'))`,
-        [req.user.id, job_id, expiresAt.toISOString()]
-      );
+      await query(`INSERT INTO poster_packages (user_id, job_id, type, tradies_unlocked, tradies_limit, expires_at, is_active, created_at)
+         VALUES ($1, $2, '20-tradie', 0, 20, $3, 1, datetime('now'))`, [req.user.id, job_id, expiresAt.toISOString()]);
 
       res.status(201).json({ 
         message: '20-Tradie Unlock Pro Pack purchased successfully',
@@ -358,27 +331,26 @@ router.post('/20-tradie-pack',
 // GET /api/contact/my-contacts - List contacts unlocked
 router.get('/my-contacts', authenticateToken, async (req, res) => {
   try {
-    const contacts = await query(
-      `SELECT 
+    const contacts = await query(`SELECT 
         ct.*,
         j.title as job_title,
         CASE 
-          WHEN ct.from_user_id = ? THEN to_user.name
+          WHEN ct.from_user_id = $1 THEN to_user.name
           ELSE from_user.name
         END as contact_name,
         CASE 
-          WHEN ct.from_user_id = ? THEN to_user.email
+          WHEN ct.from_user_id = $2 THEN to_user.email
           ELSE from_user.email
         END as contact_email,
         CASE 
-          WHEN ct.from_user_id = ? THEN to_user.phone
+          WHEN ct.from_user_id = $3 THEN to_user.phone
           ELSE from_user.phone
         END as contact_phone
       FROM contact_transactions ct
       JOIN jobs j ON ct.job_id = j.id
       LEFT JOIN users from_user ON ct.from_user_id = from_user.id
       LEFT JOIN users to_user ON ct.to_user_id = to_user.id
-      WHERE ct.from_user_id = ? OR ct.to_user_id = ?
+      WHERE ct.from_user_id = $4 OR ct.to_user_id = $5
       ORDER BY ct.created_at DESC`,
       [req.user.id, req.user.id, req.user.id, req.user.id, req.user.id]
     );

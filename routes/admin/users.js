@@ -1,6 +1,7 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
-const { query, get, run } = require('../../db/connection');
+const db = require('../db/connection'); // Use db.query() instead of get()/run()
+const { query } = require('../../db/connection');
 const { authenticateToken, requireAdmin } = require('../../middleware/auth');
 
 const router = express.Router();
@@ -76,7 +77,7 @@ router.get('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const user = await get('SELECT * FROM users WHERE id = ?', [id]);
+    const user = await query('SELECT * FROM users WHERE id = $1', [id]).then(r => r[0]);
 
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
@@ -94,7 +95,7 @@ router.post('/:id/promote-god-tier', async (req, res) => {
   try {
     const { id } = req.params;
 
-    const user = await get('SELECT id, role, tier FROM users WHERE id = ?', [id]);
+    const user = await query('SELECT id, role, tier FROM users WHERE id = $1', [id]).then(r => r[0]);
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
@@ -103,9 +104,9 @@ router.post('/:id/promote-god-tier', async (req, res) => {
       return res.status(400).json({ error: 'Only tradie users can be promoted to god tier' });
     }
 
-    await run('UPDATE users SET tier = ? WHERE id = ?', ['god', id]);
+    await query('UPDATE users SET tier = $1 WHERE id = $2 RETURNING *', ['god', id]);
 
-    const updated = await get('SELECT * FROM users WHERE id = ?', [id]);
+    const updated = await query('SELECT * FROM users WHERE id = $1', [id]).then(r => r[0]);
     res.json(updated);
   } catch (error) {
     console.error('Promote god tier error:', error);
@@ -126,15 +127,12 @@ router.post('/:id/ban',
       const { id } = req.params;
       const { reason } = req.body;
 
-      const user = await get('SELECT id FROM users WHERE id = ?', [id]);
+      const user = await query('SELECT id FROM users WHERE id = $1', [id]).then(r => r[0]);
       if (!user) {
         return res.status(404).json({ error: 'User not found' });
       }
 
-      await run(
-        'UPDATE users SET status = ?, banned_at = CURRENT_TIMESTAMP, banned_reason = ? WHERE id = ?',
-        ['banned', reason, id]
-      );
+      await query('UPDATE users SET status = $1, banned_at = CURRENT_TIMESTAMP, banned_reason = $2 WHERE id = $3', ['banned', reason, id]);
 
       res.json({ message: 'User banned successfully' });
     } catch (error) {
@@ -157,15 +155,12 @@ router.post('/:id/suspend',
       const { id } = req.params;
       const { reason } = req.body;
 
-      const user = await get('SELECT id FROM users WHERE id = ?', [id]);
+      const user = await query('SELECT id FROM users WHERE id = $1', [id]).then(r => r[0]);
       if (!user) {
         return res.status(404).json({ error: 'User not found' });
       }
 
-      await run(
-        'UPDATE users SET status = ?, suspended_at = CURRENT_TIMESTAMP, suspended_reason = ? WHERE id = ?',
-        ['suspended', reason, id]
-      );
+      await query('UPDATE users SET status = $1, suspended_at = CURRENT_TIMESTAMP, suspended_reason = $2 WHERE id = $3', ['suspended', reason, id]);
 
       res.json({ message: 'User suspended successfully' });
     } catch (error) {
@@ -180,7 +175,7 @@ router.post('/:id/unban', async (req, res) => {
   try {
     const { id } = req.params;
 
-    const user = await get('SELECT id, status FROM users WHERE id = ?', [id]);
+    const user = await query('SELECT id, status FROM users WHERE id = $1', [id]).then(r => r[0]);
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
@@ -189,7 +184,7 @@ router.post('/:id/unban', async (req, res) => {
       return res.status(400).json({ error: 'User is not banned' });
     }
 
-    await run('UPDATE users SET status = ?, banned_at = NULL, banned_reason = NULL WHERE id = ?', ['active', id]);
+    await query('UPDATE users SET status = $1, banned_at = NULL, banned_reason = NULL WHERE id = $2 RETURNING *', ['active', id]);
 
     res.json({ message: 'User unbanned successfully' });
   } catch (error) {
@@ -203,7 +198,7 @@ router.post('/:id/unsuspend', async (req, res) => {
   try {
     const { id } = req.params;
 
-    const user = await get('SELECT id, status FROM users WHERE id = ?', [id]);
+    const user = await query('SELECT id, status FROM users WHERE id = $1', [id]).then(r => r[0]);
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
@@ -212,7 +207,7 @@ router.post('/:id/unsuspend', async (req, res) => {
       return res.status(400).json({ error: 'User is not suspended' });
     }
 
-    await run('UPDATE users SET status = ?, suspended_at = NULL, suspended_reason = NULL WHERE id = ?', ['active', id]);
+    await query('UPDATE users SET status = $1, suspended_at = NULL, suspended_reason = NULL WHERE id = $2 RETURNING *', ['active', id]);
 
     res.json({ message: 'User unsuspended successfully' });
   } catch (error) {
@@ -226,7 +221,7 @@ router.post('/:id/reset-password', async (req, res) => {
   try {
     const { id } = req.params;
 
-    const user = await get('SELECT id, email FROM users WHERE id = ?', [id]);
+    const user = await query('SELECT id, email FROM users WHERE id = $1', [id]).then(r => r[0]);
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }

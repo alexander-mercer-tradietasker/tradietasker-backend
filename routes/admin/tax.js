@@ -1,6 +1,7 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
-const { query, get, run } = require('../../db/connection');
+const db = require('../db/connection'); // Use db.query() instead of get()/run()
+const { query } = require('../../db/connection');
 const { authenticateToken, requireAdmin } = require('../../middleware/auth');
 
 const router = express.Router();
@@ -39,13 +40,10 @@ router.post('/rates',
 
       const { name, country, state_province, rate_percent, tax_id_label, tax_id_number } = req.body;
 
-      const result = await run(
-        `INSERT INTO tax_rates (name, country, state_province, rate_percent, tax_id_label, tax_id_number, enabled)
-         VALUES (?, ?, ?, ?, ?, ?, true)`,
-        [name, country, state_province || null, rate_percent, tax_id_label || null, tax_id_number || null]
-      );
+      const result = await query(`INSERT INTO tax_rates (name, country, state_province, rate_percent, tax_id_label, tax_id_number, enabled)
+         VALUES ($1, $2, $3, $4, $5, $6, true)`, [name, country, state_province || null, rate_percent, tax_id_label || null, tax_id_number || null]);
 
-      const newRate = await get('SELECT * FROM tax_rates WHERE id = ?', [result.lastID]);
+      const newRate = await query('SELECT * FROM tax_rates WHERE id = $1', [result.lastID]).then(r => r[0]);
       res.status(201).json(newRate);
     } catch (error) {
       console.error('Create tax rate error:', error);
@@ -74,7 +72,7 @@ router.put('/rates/:id',
       const { id } = req.params;
       const updates = req.body;
 
-      const existing = await get('SELECT id FROM tax_rates WHERE id = ?', [id]);
+      const existing = await query('SELECT id FROM tax_rates WHERE id = $1', [id]).then(r => r[0]);
       if (!existing) {
         return res.status(404).json({ error: 'Tax rate not found' });
       }
@@ -88,12 +86,12 @@ router.put('/rates/:id',
       const values = fields.map(f => updates[f]);
       values.push(id);
 
-      await run(
+      await query(
         `UPDATE tax_rates SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
         values
       );
 
-      const updated = await get('SELECT * FROM tax_rates WHERE id = ?', [id]);
+      const updated = await query('SELECT * FROM tax_rates WHERE id = $1', [id]).then(r => r[0]);
       res.json(updated);
     } catch (error) {
       console.error('Update tax rate error:', error);
@@ -107,12 +105,12 @@ router.delete('/rates/:id', async (req, res) => {
   try {
     const { id } = req.params;
 
-    const existing = await get('SELECT id FROM tax_rates WHERE id = ?', [id]);
+    const existing = await query('SELECT id FROM tax_rates WHERE id = $1', [id]).then(r => r[0]);
     if (!existing) {
       return res.status(404).json({ error: 'Tax rate not found' });
     }
 
-    await run('DELETE FROM tax_rates WHERE id = ?', [id]);
+    await query('DELETE FROM tax_rates WHERE id = $1', [id]);
     res.json({ message: 'Tax rate deleted successfully' });
   } catch (error) {
     console.error('Delete tax rate error:', error);
@@ -125,15 +123,15 @@ router.post('/rates/:id/toggle', async (req, res) => {
   try {
     const { id } = req.params;
 
-    const existing = await get('SELECT enabled FROM tax_rates WHERE id = ?', [id]);
+    const existing = await query('SELECT enabled FROM tax_rates WHERE id = $1', [id]).then(r => r[0]);
     if (!existing) {
       return res.status(404).json({ error: 'Tax rate not found' });
     }
 
     const newEnabled = !existing.enabled;
-    await run('UPDATE tax_rates SET enabled = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [newEnabled, id]);
+    await query('UPDATE tax_rates SET enabled = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *', [newEnabled, id]);
 
-    const updated = await get('SELECT * FROM tax_rates WHERE id = ?', [id]);
+    const updated = await query('SELECT * FROM tax_rates WHERE id = $1', [id]).then(r => r[0]);
     res.json(updated);
   } catch (error) {
     console.error('Toggle tax rate error:', error);

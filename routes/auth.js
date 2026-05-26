@@ -1,7 +1,8 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const { body, validationResult } = require('express-validator');
-const { query, get, run, isPostgres } = require('../db/connection');
+const db = require('../db/connection'); // Use db.query() instead of get()/run()
+const { query, isPostgres } = require('../db/connection');
 const { generateToken } = require('../middleware/auth');
 
 const router = express.Router();
@@ -28,7 +29,7 @@ router.post('/register',
       console.log('[Register] After validation:', { email, name, phone, role });
 
       // Check if user already exists
-      const existingUser = await get('SELECT id FROM users WHERE email = ?', [email]);
+      const existingUser = await query('SELECT id FROM users WHERE email = $1', [email]).then(r => r[0]);
       if (existingUser) {
         return res.status(409).json({ error: 'Email already registered' });
       }
@@ -49,20 +50,14 @@ router.post('/register',
       
       if (isPostgresEnv) {
         // Postgres: Use RETURNING clause
-        user = await get(
-          `INSERT INTO users (email, ${passwordColumn}, name, phone, role, tier, credits, profile_completed)
-           VALUES (?, ?, ?, ?, ?, 'free', 0, ?)
-           RETURNING id, email, name, phone, role, tier, credits, profile_completed`,
-          [email, passwordHash, name, phone || null, role, profileCompleted]
-        );
+        user = await query(`INSERT INTO users (email, ${passwordColumn}, name, phone, role, tier, credits, profile_completed)
+           VALUES ($1, $2, $3, $4, $5, 'free', 0, $6)
+           RETURNING id, email, name, phone, role, tier, credits, profile_completed`, [email, passwordHash, name, phone || null, role, profileCompleted]).then(r => r[0]);
       } else {
         // SQLite: Use lastID
-        const result = await run(
-          `INSERT INTO users (email, ${passwordColumn}, name, phone, role, tier, credits, profile_completed)
-           VALUES (?, ?, ?, ?, ?, 'free', 0, ?)`,
-          [email, passwordHash, name, phone || null, role, profileCompleted]
-        );
-        user = await get('SELECT id, email, name, phone, role, tier, credits, profile_completed FROM users WHERE id = ?', [result.lastID]);
+        const result = await query(`INSERT INTO users (email, ${passwordColumn}, name, phone, role, tier, credits, profile_completed)
+           VALUES ($1, $2, $3, $4, $5, 'free', 0, $6)`, [email, passwordHash, name, phone || null, role, profileCompleted]);
+        user = await query('SELECT id, email, name, phone, role, tier, credits, profile_completed FROM users WHERE id = $1', [result.lastID]).then(r => r[0]);
       }
 
       // Generate token
@@ -100,7 +95,7 @@ router.post('/login',
       const { email, password } = req.body;
 
       // Get user
-      const user = await get('SELECT * FROM users WHERE email = ?', [email]);
+      const user = await query('SELECT * FROM users WHERE email = $1', [email]).then(r => r[0]);
       if (!user) {
         return res.status(401).json({ error: 'Invalid email or password' });
       }

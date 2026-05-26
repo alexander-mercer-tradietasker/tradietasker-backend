@@ -1,7 +1,8 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const { body, validationResult } = require('express-validator');
-const { query, get, run } = require('../db/connection');
+const db = require('../db/connection'); // Use db.query() instead of get()/run()
+const { query } = require('../db/connection');
 const { authenticateToken } = require('../middleware/auth');
 const multer = require('multer');
 const path = require('path');
@@ -88,36 +89,27 @@ router.put('/:id/assign',
       const { tradie_id } = req.body;
 
       // Verify job belongs to customer
-      const job = await get('SELECT * FROM jobs WHERE id = ? AND poster_id = ?', [id, req.user.id]);
+      const job = await query('SELECT * FROM jobs WHERE id = $1 AND poster_id = $2', [id, req.user.id]).then(r => r[0]);
       if (!job) {
         return res.status(404).json({ error: 'Job not found or not authorized' });
       }
 
       // Verify tradie is unlocked
-      const unlocked = await get(
-        `SELECT id FROM contact_transactions 
-         WHERE from_user_id = ? AND to_user_id = ? AND type IN ('poster-unlock-tradie', 'poster-3-pack', 'poster-20-pack')`,
-        [req.user.id, tradie_id]
-      );
+      const unlocked = await query(`SELECT id FROM contact_transactions 
+         WHERE from_user_id = $1 AND to_user_id = $2 AND type IN ('poster-unlock-tradie', 'poster-3-pack', 'poster-20-pack')`, [req.user.id, tradie_id]).then(r => r[0]);
       
       if (!unlocked) {
         return res.status(403).json({ error: 'Tradie must be unlocked before assignment' });
       }
 
       // Assign tradie and update status
-      await run(
-        'UPDATE jobs SET assigned_tradie_id = ?, status = ?, updated_at = datetime(\'now\') WHERE id = ?',
-        [tradie_id, 'in-progress', id]
-      );
+      await query('UPDATE jobs SET assigned_tradie_id = $1, status = $2, updated_at = datetime(\'now\') WHERE id = $3', [tradie_id, 'in-progress', id]);
 
       // Get updated job
-      const updatedJob = await get(
-        `SELECT j.*, u.name as assigned_tradie_name 
+      const updatedJob = await query(`SELECT j.*, u.name as assigned_tradie_name 
          FROM jobs j 
          LEFT JOIN users u ON j.assigned_tradie_id = u.id 
-         WHERE j.id = ?`,
-        [id]
-      );
+         WHERE j.id = $1`, [id]).then(r => r[0]);
 
       res.json({
         message: 'Tradie assigned successfully',
@@ -136,10 +128,7 @@ router.put('/:id/complete', authenticateToken, async (req, res) => {
     const { id } = req.params;
 
     // Verify job belongs to customer and is in-progress
-    const job = await get(
-      'SELECT * FROM jobs WHERE id = ? AND poster_id = ? AND status = ?',
-      [id, req.user.id, 'in-progress']
-    );
+    const job = await query('SELECT * FROM jobs WHERE id = $1 AND poster_id = $2 AND status = $3', [id, req.user.id, 'in-progress']).then(r => r[0]);
     
     if (!job) {
       return res.status(404).json({ 
@@ -148,10 +137,7 @@ router.put('/:id/complete', authenticateToken, async (req, res) => {
     }
 
     // Update job status
-    await run(
-      'UPDATE jobs SET status = ?, completed_at = datetime(\'now\'), updated_at = datetime(\'now\') WHERE id = ?',
-      ['complete', id]
-    );
+    await query('UPDATE jobs SET status = $1, completed_at = datetime(\'now\'), updated_at = datetime(\'now\') WHERE id = $2', ['complete', id]);
 
     res.json({
       message: 'Job marked as complete. Please rate and review the tradie.',
@@ -212,13 +198,12 @@ router.put('/profile',
       const setClause = Object.keys(updates).map(key => `${key} = ?`).join(', ');
       const values = [...Object.values(updates), req.user.id];
 
-      await run(
-        `UPDATE users SET ${setClause}, updated_at = datetime('now') WHERE id = ?`,
+      await query(`UPDATE users SET ${setClause}, updated_at = datetime('now') WHERE id = $1`,
         values
       );
 
       // Get updated user
-      const user = await get('SELECT * FROM users WHERE id = ?', [req.user.id]);
+      const user = await query('SELECT * FROM users WHERE id = $1', [req.user.id]).then(r => r[0]);
       delete user.password_hash;
 
       // Parse JSON fields
@@ -263,7 +248,7 @@ router.post('/password',
       }
 
       // Get current user with password hash
-      const user = await get('SELECT * FROM users WHERE id = ?', [req.user.id]);
+      const user = await query('SELECT * FROM users WHERE id = $1', [req.user.id]).then(r => r[0]);
       if (!user) {
         return res.status(404).json({ error: 'User not found' });
       }
@@ -278,10 +263,8 @@ router.post('/password',
       const newHash = await bcrypt.hash(new_password, 10);
 
       // Update password
-      await run(
-        `UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE id = ?`,
-        [newHash, req.user.id]
-      );
+      await query(
+        `UPDATE users SET password_hash = $2, updated_at = datetime('now') WHERE id = $3`, [newHash, req.user.id]);
 
       res.json({ message: 'Password changed successfully' });
     } catch (error) {
@@ -312,10 +295,7 @@ router.post('/photo',
         });
       }
 
-      await run(
-        `UPDATE users SET profile_photo_url = ?, updated_at = datetime('now') WHERE id = ?`,
-        [base64Image, req.user.id]
-      );
+      await query(`UPDATE users SET profile_photo_url = $1, updated_at = datetime('now') WHERE id = $2`, [base64Image, req.user.id]);
 
       res.json({ 
         message: 'Profile photo updated successfully',
@@ -332,10 +312,7 @@ router.post('/photo',
 router.get('/overview', authenticateToken, async (req, res) => {
   try {
     // Get user details
-    const user = await get(
-      'SELECT id, name, email, phone, credits, residential_address FROM users WHERE id = ?',
-      [req.user.id]
-    );
+    const user = await query('SELECT id, name, email, phone, credits, residential_address FROM users WHERE id = $1', [req.user.id]).then(r => r[0]);
 
     // Get contacted tradies
     const contactedTradies = await query(`
@@ -351,7 +328,7 @@ router.get('/overview', authenticateToken, async (req, res) => {
       FROM contact_transactions ct
       LEFT JOIN users u ON ct.receiver_id = u.id
       LEFT JOIN jobs j ON ct.job_id = j.id
-      WHERE ct.sender_id = ?
+      WHERE ct.sender_id = $1
       ORDER BY ct.created_at DESC
       LIMIT 10
     `, [req.user.id]);

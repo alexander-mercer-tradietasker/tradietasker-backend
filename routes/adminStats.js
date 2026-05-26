@@ -9,7 +9,7 @@ router.use(authenticateAdmin);
 router.get('/stats', async (req, res) => {
   try {
     // User stats
-    const userStats = await get(`
+    const userStats = await query(`
       SELECT 
         COUNT(*) as total_users,
         SUM(CASE WHEN tier = 'god' THEN 1 ELSE 0 END) as god_users,

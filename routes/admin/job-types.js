@@ -32,8 +32,7 @@ router.post('/', async (req, res) => {
     }
 
     // Check if job type already exists
-    const existing = await query(
-      'SELECT id FROM job_types WHERE LOWER(name) = LOWER(?)',
+    const existing = await query('SELECT id FROM job_types WHERE LOWER(name) = LOWER($1)',
       [name]
     );
 
@@ -41,13 +40,9 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'Job type already exists' });
     }
 
-    const result = await run(
-      'INSERT INTO job_types (name, category, description) VALUES (?, ?, ?) RETURNING id',
-      [name, category, description || null]
-    );
+    const result = await query('INSERT INTO job_types (name, category, description) VALUES ($1, $2, $3) RETURNING id', [name, category, description || null]);
 
-    const jobType = await query(
-      'SELECT * FROM job_types WHERE id = ?',
+    const jobType = await query('SELECT * FROM job_types WHERE id = $1',
       [result.lastID]
     );
 
@@ -72,8 +67,7 @@ router.put('/:id', async (req, res) => {
     }
 
     // Check if job type exists
-    const existing = await query(
-      'SELECT id FROM job_types WHERE id = ?',
+    const existing = await query('SELECT id FROM job_types WHERE id = $1',
       [id]
     );
 
@@ -81,13 +75,9 @@ router.put('/:id', async (req, res) => {
       return res.status(404).json({ error: 'Job type not found' });
     }
 
-    await run(
-      'UPDATE job_types SET name = ?, category = ?, description = ? WHERE id = ?',
-      [name, category, description || null, id]
-    );
+    await query('UPDATE job_types SET name = $1, category = $2, description = $3 WHERE id = $4', [name, category, description || null, id]);
 
-    const jobType = await query(
-      'SELECT * FROM job_types WHERE id = ?',
+    const jobType = await query('SELECT * FROM job_types WHERE id = $1',
       [id]
     );
 
@@ -107,8 +97,7 @@ router.delete('/:id', async (req, res) => {
     const { id } = req.params;
 
     // Check if job type exists
-    const existing = await query(
-      'SELECT id FROM job_types WHERE id = ?',
+    const existing = await query('SELECT id FROM job_types WHERE id = $1',
       [id]
     );
 
@@ -117,8 +106,7 @@ router.delete('/:id', async (req, res) => {
     }
 
     // Check if job type is used in any jobs
-    const jobsUsingType = await query(
-      'SELECT COUNT(*) as count FROM jobs WHERE job_type_id = ?',
+    const jobsUsingType = await query('SELECT COUNT(*) as count FROM jobs WHERE job_type_id = $1',
       [id]
     );
 
@@ -129,7 +117,7 @@ router.delete('/:id', async (req, res) => {
       });
     }
 
-    await run('DELETE FROM job_types WHERE id = ?', [id]);
+    await query('DELETE FROM job_types WHERE id = $1', [id]);
 
     res.json({ message: 'Job type deleted successfully' });
   } catch (error) {

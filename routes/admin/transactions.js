@@ -192,13 +192,12 @@ router.get('/user/:userId', async (req, res) => {
       FROM contact_transactions ct
       LEFT JOIN users receiver ON ct.receiver_id = receiver.id
       LEFT JOIN jobs j ON ct.job_id = j.id
-      WHERE ct.sender_id = ?
+      WHERE ct.sender_id = $1
       ORDER BY ct.created_at DESC
-      LIMIT ? OFFSET ?
+      LIMIT $2 OFFSET $3
     `, [userId, parseInt(limit), offset]);
 
-    const countResult = await query(
-      'SELECT COUNT(*) as total FROM contact_transactions WHERE sender_id = ?',
+    const countResult = await query('SELECT COUNT(*) as total FROM contact_transactions WHERE sender_id = $1',
       [userId]
     );
 

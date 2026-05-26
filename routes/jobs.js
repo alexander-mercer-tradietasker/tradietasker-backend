@@ -1,7 +1,8 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const { body, validationResult } = require('express-validator');
-const { query, get, run } = require('../db/connection');
+const db = require('../db/connection'); // Use db.query() instead of get()/run()
+const { query } = require('../db/connection');
 const { authenticateToken, optionalAuth, generateToken } = require('../middleware/auth');
 
 const router = express.Router();
@@ -67,7 +68,7 @@ router.get('/', optionalAuth, async (req, res) => {
     // Filter by profession (match job type to profession category)
     if (profession_id && req.user) {
       // Get profession category
-      const profession = await get('SELECT category FROM professions WHERE id = ?', [profession_id]);
+      const profession = await query('SELECT category FROM professions WHERE id = $1', [profession_id]).then(r => r[0]);
       if (profession) {
         sql += ` AND jt.category IN (
           SELECT DISTINCT p.category FROM professions p WHERE p.id = ?
@@ -180,18 +181,15 @@ router.post('/',
         }
 
         // Check if user exists
-        const existingUser = await get('SELECT id FROM users WHERE email = ?', [email]);
+        const existingUser = await query('SELECT id FROM users WHERE email = $1', [email]).then(r => r[0]);
         if (existingUser) {
           return res.status(409).json({ error: 'Email already registered. Please login.' });
         }
 
         // Create user
         const passwordHash = await bcrypt.hash(password, 10);
-        const userResult = await run(
-          `INSERT INTO users (email, password_hash, name, phone, role, tier, credits, created_at)
-           VALUES (?, ?, ?, ?, 'poster', 'free', 0, datetime('now'))`,
-          [email, passwordHash, name, phone || null]
-        );
+        const userResult = await query(`INSERT INTO users (email, password_hash, name, phone, role, tier, credits, created_at)
+           VALUES ($1, $2, $3, $4, 'poster', 'free', 0, datetime('now'))`, [email, passwordHash, name, phone || null]);
 
         userId = userResult.lastID;
         token = generateToken(userId);
@@ -211,13 +209,13 @@ router.post('/',
       } = req.body;
 
       // Verify job type exists and get category
-      const jobType = await get('SELECT id, category FROM job_types WHERE id = ?', [job_type_id]);
+      const jobType = await query('SELECT id, category FROM job_types WHERE id = $1', [job_type_id]).then(r => r[0]);
       if (!jobType) {
         return res.status(404).json({ error: 'Job type not found' });
       }
 
       // Get poster name from user
-      const poster = await get('SELECT name FROM users WHERE id = ?', [userId]);
+      const poster = await query('SELECT name FROM users WHERE id = $1', [userId]).then(r => r[0]);
       const posterName = poster ? poster.name : 'Anonymous';
 
       // Build location string
@@ -227,13 +225,11 @@ router.post('/',
       const description = short_description;
 
       // Create job
-      const jobResult = await run(
-        `INSERT INTO jobs (
+      const jobResult = await query(`INSERT INTO jobs (
           user_id, job_type_id, title, poster_name, category, description,
           short_description, full_description, location, budget, postcode, 
           suburb, state, urgency, photos, status, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', datetime('now'))`,
-        [
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 'open', datetime('now'))`, [
           userId,
           job_type_id,
           title,
@@ -249,10 +245,9 @@ router.post('/',
           state,
           urgency,
           JSON.stringify(photos)
-        ]
-      );
+        ]);
 
-      const job = await get('SELECT * FROM jobs WHERE id = ?', [jobResult.lastID]);
+      const job = await query('SELECT * FROM jobs WHERE id = $1', [jobResult.lastID]).then(r => r[0]);
 
       res.status(201).json({
         message: 'Job posted successfully',
@@ -269,8 +264,7 @@ router.post('/',
 // GET /api/jobs/:id - Get job details
 router.get('/:id', optionalAuth, async (req, res) => {
   try {
-    const job = await get(
-      `SELECT 
+    const job = await query(`SELECT 
         j.*,
         jt.name as job_type_name,
         jt.category as job_type_category,
@@ -280,9 +274,7 @@ router.get('/:id', optionalAuth, async (req, res) => {
       FROM jobs j
       LEFT JOIN job_types jt ON j.job_type_id = jt.id
       LEFT JOIN users u ON j.user_id = u.id
-      WHERE j.id = ?`,
-      [req.params.id]
-    );
+      WHERE j.id = $1`, [req.params.id]).then(r => r[0]);
 
     if (!job) {
       return res.status(404).json({ error: 'Job not found' });
@@ -300,11 +292,8 @@ router.get('/:id', optionalAuth, async (req, res) => {
     // Check if user has purchased full contact
     let hasFullContact = false;
     if (req.user) {
-      const contact = await get(
-        `SELECT id FROM contact_transactions 
-         WHERE from_user_id = ? AND job_id = ? AND type IN ('full-contact', 'poster-unlock-tradie')`,
-        [req.user.id, job.id]
-      );
+      const contact = await query(`SELECT id FROM contact_transactions 
+         WHERE from_user_id = $1 AND job_id = $2 AND type IN ('full-contact', 'poster-unlock-tradie')`, [req.user.id, job.id]).then(r => r[0]);
       hasFullContact = !!contact;
     }
 
@@ -340,7 +329,7 @@ router.put('/:id/status',
       const { status } = req.body;
 
       // Verify ownership
-      const job = await get('SELECT * FROM jobs WHERE id = ?', [req.params.id]);
+      const job = await query('SELECT * FROM jobs WHERE id = $1', [req.params.id]).then(r => r[0]);
       if (!job) {
         return res.status(404).json({ error: 'Job not found' });
       }
@@ -350,17 +339,11 @@ router.put('/:id/status',
       }
 
       // Update status
-      await run(
-        `UPDATE jobs SET status = ?, updated_at = datetime('now') WHERE id = ?`,
-        [status, req.params.id]
-      );
+      await query(`UPDATE jobs SET status = $1, updated_at = datetime('now') WHERE id = $2`, [status, req.params.id]);
 
       // If marking complete, set completed_at
       if (status === 'complete') {
-        await run(
-          `UPDATE jobs SET completed_at = datetime('now') WHERE id = ?`,
-          [req.params.id]
-        );
+        await query(`UPDATE jobs SET completed_at = datetime('now') WHERE id = $1`, [req.params.id]);
       }
 
       res.json({ message: 'Job status updated successfully', status });
@@ -385,7 +368,7 @@ router.post('/:id/award',
       const { tasker_id } = req.body;
 
       // Verify ownership
-      const job = await get('SELECT * FROM jobs WHERE id = ?', [req.params.id]);
+      const job = await query('SELECT * FROM jobs WHERE id = $1', [req.params.id]).then(r => r[0]);
       if (!job) {
         return res.status(404).json({ error: 'Job not found' });
       }
@@ -395,16 +378,13 @@ router.post('/:id/award',
       }
 
       // Verify tasker exists
-      const tasker = await get('SELECT id FROM users WHERE id = ?', [tasker_id]);
+      const tasker = await query('SELECT id FROM users WHERE id = $1', [tasker_id]).then(r => r[0]);
       if (!tasker) {
         return res.status(404).json({ error: 'Tasker not found' });
       }
 
       // Award job
-      await run(
-        `UPDATE jobs SET status = 'awarded', awarded_to_user_id = ?, updated_at = datetime('now') WHERE id = ?`,
-        [tasker_id, req.params.id]
-      );
+      await query(`UPDATE jobs SET status = 'awarded', awarded_to_user_id = $1, updated_at = datetime('now') WHERE id = $2`, [tasker_id, req.params.id]);
 
       res.json({ 
         message: 'Job awarded successfully',
