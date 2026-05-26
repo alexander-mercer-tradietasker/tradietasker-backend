@@ -21,6 +21,7 @@ const profileUnlockRoutes = require('./routes/profileUnlocks');
 const webhookRoutes = require('./routes/webhooks');
 const adminRoutes = require('./routes/admin');
 const adminAuthRoutes = require('./routes/adminAuth');
+const adminStatsRoutes = require('./routes/adminStats');
 const adminTiersRoutes = require('./routes/admin/tiers');
 const adminTaxRoutes = require('./routes/admin/tax');
 const adminSettingsRoutes = require('./routes/admin/settings');
@@ -37,8 +38,6 @@ const adminReferralsRoutes = require('./routes/admin/referrals');
 const referralsRoutes = require('./routes/referrals');
 const versionRoutes = require('./routes/version');
 const seedRoutes = require('./routes/seed');
-const migrateAdminRoutes = require('./routes/migrate-admin');
-const debugRoutesRoutes = require('./routes/debug-routes');
 const tradieDashboardRoutes = require('./routes/tradie-dashboard');
 const customerDashboardRoutes = require('./routes/customer-dashboard');
 const messagesRoutes = require('./routes/messages');
@@ -79,30 +78,27 @@ app.use('/api/profile-unlocks', profileUnlockRoutes);
 app.use('/api/webhooks', webhookRoutes);
 app.use('/api/version', versionRoutes);
 app.use('/api/admin-auth', adminAuthRoutes);
-// Specific admin routes MUST come before generic catch-all routes
-app.use('/api/admin/stats', adminStatsRoutesNew);
+app.use('/api/admin', adminStatsRoutes);
+app.use('/api/admin', adminRoutes);
 app.use('/api/admin/tiers', adminTiersRoutes);
 app.use('/api/admin/tax', adminTaxRoutes);
 app.use('/api/admin/settings', adminSettingsRoutes);
 app.use('/api/admin/promo-codes', adminPromoCodesRoutes);
 app.use('/api/admin/users', adminUsersRoutes);
 app.use('/api/admin/jobs', adminJobsRoutes);
+app.use('/api/admin/stats', adminStatsRoutesNew);
 app.use('/api/admin/professions', adminProfessionsRoutes);
 app.use('/api/admin/job-types', adminJobTypesRoutes);
 app.use('/api/admin/reviews', adminReviewsRoutes);
 app.use('/api/admin/transactions', adminTransactionsRoutes);
 app.use('/api/admin/subscriptions', adminSubscriptionsRoutes);
 app.use('/api/admin/referrals', adminReferralsRoutes);
-// Generic admin routes last (catch-all for remaining /api/admin/* routes)
-app.use('/api/admin', adminRoutes);
 app.use('/api/referrals', referralsRoutes);
 app.use('/api/tradie-dashboard', tradieDashboardRoutes);
 app.use('/api/customer-dashboard', customerDashboardRoutes);
 app.use('/api/messages', messagesRoutes);
 // app.use('/api/promo-codes', promoCodeRoutes);
 app.use('/api/seed', seedRoutes);
-app.use('/api/migrate-admin', migrateAdminRoutes);
-app.use('/api/debug/routes', debugRoutesRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
