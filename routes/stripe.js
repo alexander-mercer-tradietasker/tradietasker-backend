@@ -113,7 +113,7 @@ router.post('/create-credits-checkout', authenticateToken, async (req, res) => {
           quantity: 1,
         },
       ],
-      success_url: `${getFrontendUrl()}/package-success?session_id={CHECKOUT_SESSION_ID}`,
+      success_url: `${getFrontendUrl()}/credits-success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${getFrontendUrl()}/subscription/upgrade`,
       metadata: {
         user_id: req.user.id,
