@@ -39,7 +39,8 @@ router.get('/:tier', async (req, res) => {
   try {
     const { tier } = req.params;
     
-    const tierConfig = const result = await query('SELECT * FROM tiers WHERE tier_name = $1', [tier]); const tierConfig = result[0];
+    const result = await query('SELECT * FROM tiers WHERE tier_name = $1', [tier]);
+    const tierConfig = result[0];
     
     if (!tierConfig) {
       return res.status(404).json({ error: 'Tier not found' });
@@ -81,7 +82,8 @@ router.put('/:tier',
       const updates = req.body;
 
       // Check tier exists
-      const existingResult = await query('SELECT id FROM tiers WHERE tier_name = $1', [tier]); const existing = existingResult[0];
+      const result2 = await query('SELECT id FROM tiers WHERE tier_name = $1', [tier]);
+      const existing = result2[0];
       if (!existing) {
         return res.status(404).json({ error: 'Tier not found' });
       }
@@ -122,17 +124,18 @@ router.put('/:tier',
         return res.status(400).json({ error: 'No valid fields to update' });
       }
 
-      const setClause = fields.map(f => `${f} = ?`).join(', ');
+      const setClause = fields.map((f, i) => `${f} = ${i + 1}`).join(', ');
       const values = fields.map(f => filteredUpdates[f]);
       values.push(tier);
 
       await run(
-        `UPDATE tiers SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE tier_name = ?`,
+        `UPDATE tiers SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE tier_name = ${values.length}`,
         values
       );
 
       // Return updated tier config
-      const updated = const result = await query('SELECT * FROM tiers WHERE tier_name = $1', [tier]); const tierConfig = result[0];
+      const result3 = await query('SELECT * FROM tiers WHERE tier_name = $1', [tier]);
+      const updated = result3[0];
       res.json(updated);
     } catch (error) {
       console.error('Update tier error:', error);
@@ -146,7 +149,8 @@ router.get('/preview-price/:tier', async (req, res) => {
   try {
     const { tier } = req.params;
     
-    const tierConfig = const result = await query('SELECT * FROM tiers WHERE tier_name = $1', [tier]); const tierConfig = result[0];
+    const result = await query('SELECT * FROM tiers WHERE tier_name = $1', [tier]);
+    const tierConfig = result[0];
     if (!tierConfig) {
       return res.status(404).json({ error: 'Tier not found' });
     }
