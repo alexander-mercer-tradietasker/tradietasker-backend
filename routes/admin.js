@@ -49,29 +49,27 @@ router.post('/seed', async (req, res) => {
 
         // Seed Customers
         for (const email of customerEmails) {
-            const firstName = email.split('.')[0];
-            const lastName = 'Customer';
+            const name = email.split('.')[0] + ' Customer';
             await pool.query(
-                'INSERT INTO users (email, password, first_name, last_name, role) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (email) DO NOTHING',
-                [email, hashedPassword, firstName, lastName, 'customer']
+                'INSERT INTO users (email, password_hash, name, role) VALUES ($1, $2, $3, $4) ON CONFLICT (email) DO NOTHING',
+                [email, hashedPassword, name, 'poster']
             );
         }
 
         // Seed Tradies
         for (const email of tradieEmails) {
-            const firstName = email.split('.')[0];
-            const lastName = 'Tradie';
+            const name = email.split('.')[0] + ' Tradie';
             await pool.query(
-                'INSERT INTO users (email, password, first_name, last_name, role) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (email) DO NOTHING',
-                [email, hashedPassword, firstName, lastName, 'tradie']
+                'INSERT INTO users (email, password_hash, name, role) VALUES ($1, $2, $3, $4) ON CONFLICT (email) DO NOTHING',
+                [email, hashedPassword, name, 'tasker']
             );
         }
 
         // Seed Admin
         const adminPassword = await bcrypt.hash('SecureAdmin2026!', 10);
         await pool.query(
-            'INSERT INTO users (email, password, first_name, last_name, role) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (email) DO NOTHING',
-            ['admin', adminPassword, 'Admin', 'User', 'admin']
+            'INSERT INTO users (email, password_hash, name, role) VALUES ($1, $2, $3, $4) ON CONFLICT (email) DO NOTHING',
+            ['admin', adminPassword, 'Admin User', 'admin']
         );
 
         await pool.end();
