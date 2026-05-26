@@ -79,21 +79,22 @@ app.use('/api/profile-unlocks', profileUnlockRoutes);
 app.use('/api/webhooks', webhookRoutes);
 app.use('/api/version', versionRoutes);
 app.use('/api/admin-auth', adminAuthRoutes);
-app.use('/api/admin', adminStatsRoutes);
-app.use('/api/admin', adminRoutes);
+// Specific admin routes MUST come before generic catch-all routes
+app.use('/api/admin/stats', adminStatsRoutesNew);
 app.use('/api/admin/tiers', adminTiersRoutes);
 app.use('/api/admin/tax', adminTaxRoutes);
 app.use('/api/admin/settings', adminSettingsRoutes);
 app.use('/api/admin/promo-codes', adminPromoCodesRoutes);
 app.use('/api/admin/users', adminUsersRoutes);
 app.use('/api/admin/jobs', adminJobsRoutes);
-app.use('/api/admin/stats', adminStatsRoutesNew);
 app.use('/api/admin/professions', adminProfessionsRoutes);
 app.use('/api/admin/job-types', adminJobTypesRoutes);
 app.use('/api/admin/reviews', adminReviewsRoutes);
 app.use('/api/admin/transactions', adminTransactionsRoutes);
 app.use('/api/admin/subscriptions', adminSubscriptionsRoutes);
 app.use('/api/admin/referrals', adminReferralsRoutes);
+// Generic admin routes last (catch-all for remaining /api/admin/* routes)
+app.use('/api/admin', adminRoutes);
 app.use('/api/referrals', referralsRoutes);
 app.use('/api/tradie-dashboard', tradieDashboardRoutes);
 app.use('/api/customer-dashboard', customerDashboardRoutes);
