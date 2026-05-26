@@ -38,6 +38,7 @@ const referralsRoutes = require('./routes/referrals');
 const versionRoutes = require('./routes/version');
 const seedRoutes = require('./routes/seed');
 const migrateAdminRoutes = require('./routes/migrate-admin');
+const debugRoutesRoutes = require('./routes/debug-routes');
 const tradieDashboardRoutes = require('./routes/tradie-dashboard');
 const customerDashboardRoutes = require('./routes/customer-dashboard');
 const messagesRoutes = require('./routes/messages');
@@ -101,6 +102,7 @@ app.use('/api/messages', messagesRoutes);
 // app.use('/api/promo-codes', promoCodeRoutes);
 app.use('/api/seed', seedRoutes);
 app.use('/api/migrate-admin', migrateAdminRoutes);
+app.use('/api/debug/routes', debugRoutesRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
