@@ -24,15 +24,15 @@ router.get('/overview', async (req, res) => {
 
     res.json({
       users: {
-        total: parseInt(usersResult.rows[0].count),
-        byRole: usersByRoleResult.rows
+        total: parseInt(usersResult.rows[0]?.count || 0),
+        byRole: usersByRoleResult.rows || []
       },
       jobs: {
-        total: parseInt(jobsResult.rows[0].count),
-        byStatus: jobsByStatusResult.rows
+        total: parseInt(jobsResult.rows[0]?.count || 0),
+        byStatus: jobsByStatusResult.rows || []
       },
       professions: {
-        total: parseInt(professionsResult.rows[0].count)
+        total: parseInt(professionsResult.rows[0]?.count || 0)
       }
     });
   } catch (error) {
@@ -48,8 +48,8 @@ router.get('/users', async (req, res) => {
     const byRole = await pool.query('SELECT role, COUNT(*) as count FROM users GROUP BY role');
 
     res.json({
-      total: parseInt(result.rows[0].count),
-      byRole: byRole.rows
+      total: parseInt(result.rows[0]?.count || 0),
+      byRole: byRole.rows || []
     });
   } catch (error) {
     console.error('Get user stats error:', error);
@@ -64,8 +64,8 @@ router.get('/jobs', async (req, res) => {
     const byStatus = await pool.query('SELECT status, COUNT(*) as count FROM jobs GROUP BY status');
 
     res.json({
-      total: parseInt(result.rows[0].count),
-      byStatus: byStatus.rows
+      total: parseInt(result.rows[0]?.count || 0),
+      byStatus: byStatus.rows || []
     });
   } catch (error) {
     console.error('Get job stats error:', error);

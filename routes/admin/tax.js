@@ -81,12 +81,12 @@ router.put('/rates/:id',
         return res.status(400).json({ error: 'No fields to update' });
       }
 
-      const setClause = fields.map(f => `${f} = ?`).join(', ');
+      const setClause = fields.map((f, i) => `${f} = $${i + 1}`).join(', ');
       const values = fields.map(f => updates[f]);
       values.push(id);
 
       await query(
-        `UPDATE tax_rates SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+        `UPDATE tax_rates SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE id = $${values.length}`,
         values
       );
 

@@ -124,12 +124,12 @@ router.put('/:tier',
         return res.status(400).json({ error: 'No valid fields to update' });
       }
 
-      const setClause = fields.map((f, i) => `${f} = ${i + 1}`).join(', ');
+      const setClause = fields.map((f, i) => `${f} = $${i + 1}`).join(', ');
       const values = fields.map(f => filteredUpdates[f]);
       values.push(tier);
 
       await query(
-        `UPDATE tiers SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE tier_name = ${values.length}`,
+        `UPDATE tiers SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE tier_name = $${values.length}`,
         values
       );
 

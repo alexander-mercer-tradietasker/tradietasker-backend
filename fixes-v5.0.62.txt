@@ -1,0 +1,13 @@
+ISSUES FOUND:
+
+1. tax.js: SQLite syntax (? placeholders) on lines 84, 89
+2. tiers.js: SQLite syntax ($i+1 instead of placeholders) on lines 119, 123
+3. stats.js: Returns Pool result format (.rows) instead of plain array
+4. Stripe payment: Need to check tax_rates table exists
+5. Admin seed endpoint not exposed in server.js
+
+FIXES:
+- Convert tax.js to PostgreSQL syntax
+- Fix tiers.js placeholder bug  
+- Fix stats.js to return consistent format
+- Check if tax_rates table is properly seeded
