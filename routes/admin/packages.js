@@ -12,7 +12,7 @@ router.use(requireAdmin);
 router.get('/', async (req, res) => {
   try {
     const { type } = req.query;
-    let sql = 'SELECT * FROM credit_packages';
+    let sql = 'SELECT *, package_discount_percent as discount_percent, package_discount_dollar as discount_dollar, package_discount_enabled as discount_enabled FROM credit_packages';
     const params = [];
     
     if (type && ['customer', 'tradie'].includes(type)) {
@@ -33,7 +33,7 @@ router.get('/', async (req, res) => {
 // GET /api/admin/packages/:id
 router.get('/:id', async (req, res) => {
   try {
-    const result = await query('SELECT * FROM credit_packages WHERE id = $1', [req.params.id]);
+    const result = await query('SELECT *, package_discount_percent as discount_percent, package_discount_dollar as discount_dollar, package_discount_enabled as discount_enabled FROM credit_packages WHERE id = $1', [req.params.id]);
     if (!result || result.length === 0) {
       return res.status(404).json({ error: 'Package not found' });
     }
@@ -64,27 +64,39 @@ router.post('/',
         return res.status(400).json({ errors: errors.array() });
       }
 
-      const allowedFields = [
-        'package_type', 'name', 'credits', 'price_excl_tax',
-        'discount_percent', 'discount_dollar', 'discount_enabled',
-        'display_order', 'enabled'
-      ];
+      const fieldMapping = {
+        'package_type': 'package_type',
+        'name': 'name',
+        'credits': 'credits',
+        'price_excl_tax': 'price_excl_tax',
+        'discount_percent': 'package_discount_percent',
+        'discount_dollar': 'package_discount_dollar',
+        'discount_enabled': 'package_discount_enabled',
+        'display_order': 'display_order',
+        'enabled': 'enabled',
+        'standard_credits': 'standard_credits',
+        'standard_credits_multiplier': 'standard_credits_multiplier',
+        'bonus_credits': 'bonus_credits',
+        'bonus_credits_multiplier': 'bonus_credits_multiplier',
+        'additional_bonus_credits': 'additional_bonus_credits',
+        'additional_bonus_credits_multiplier': 'additional_bonus_credits_multiplier'
+      };
 
-      const fields = [];
+      const dbFields = [];
       const values = [];
       
-      for (const field of allowedFields) {
-        if (req.body[field] !== undefined) {
-          fields.push(field);
-          values.push(req.body[field]);
+      for (const [apiField, dbField] of Object.entries(fieldMapping)) {
+        if (req.body[apiField] !== undefined) {
+          dbFields.push(dbField);
+          values.push(req.body[apiField]);
         }
       }
 
-      const placeholders = fields.map((_, i) => `$${i + 1}`).join(', ');
-      const fieldsList = fields.join(', ');
+      const placeholders = dbFields.map((_, i) => `$${i + 1}`).join(', ');
+      const fieldsList = dbFields.join(', ');
 
       const result = await query(
-        `INSERT INTO credit_packages (${fieldsList}) VALUES (${placeholders}) RETURNING *`,
+        `INSERT INTO credit_packages (${fieldsList}) VALUES (${placeholders}) RETURNING *, package_discount_percent as discount_percent, package_discount_dollar as discount_dollar, package_discount_enabled as discount_enabled`,
         values
       );
 
@@ -121,30 +133,42 @@ router.put('/:id',
         return res.status(404).json({ error: 'Package not found' });
       }
 
-      const allowedFields = [
-        'package_type', 'name', 'credits', 'price_excl_tax',
-        'discount_percent', 'discount_dollar', 'discount_enabled',
-        'display_order', 'enabled'
-      ];
+      const fieldMapping = {
+        'package_type': 'package_type',
+        'name': 'name',
+        'credits': 'credits',
+        'price_excl_tax': 'price_excl_tax',
+        'discount_percent': 'package_discount_percent',
+        'discount_dollar': 'package_discount_dollar',
+        'discount_enabled': 'package_discount_enabled',
+        'display_order': 'display_order',
+        'enabled': 'enabled',
+        'standard_credits': 'standard_credits',
+        'standard_credits_multiplier': 'standard_credits_multiplier',
+        'bonus_credits': 'bonus_credits',
+        'bonus_credits_multiplier': 'bonus_credits_multiplier',
+        'additional_bonus_credits': 'additional_bonus_credits',
+        'additional_bonus_credits_multiplier': 'additional_bonus_credits_multiplier'
+      };
 
-      const updates = {};
-      for (const field of Object.keys(req.body)) {
-        if (allowedFields.includes(field)) {
-          updates[field] = req.body[field];
+      const dbUpdates = {};
+      for (const [apiField, dbField] of Object.entries(fieldMapping)) {
+        if (req.body[apiField] !== undefined) {
+          dbUpdates[dbField] = req.body[apiField];
         }
       }
 
-      const fields = Object.keys(updates);
+      const fields = Object.keys(dbUpdates);
       if (fields.length === 0) {
         return res.status(400).json({ error: 'No valid fields to update' });
       }
 
       const setClause = fields.map((f, i) => `${f} = $${i + 1}`).join(', ');
-      const values = fields.map(f => updates[f]);
+      const values = fields.map(f => dbUpdates[f]);
       values.push(req.params.id);
 
       const result = await query(
-        `UPDATE credit_packages SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE id = $${values.length} RETURNING *`,
+        `UPDATE credit_packages SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE id = $${values.length} RETURNING *, package_discount_percent as discount_percent, package_discount_dollar as discount_dollar, package_discount_enabled as discount_enabled`,
         values
       );
 
